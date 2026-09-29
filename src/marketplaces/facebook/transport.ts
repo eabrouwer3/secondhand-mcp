@@ -100,10 +100,15 @@ async function attemptGraphQL(body: URLSearchParams, timeoutMs: number): Promise
 
   const json = (await response.json()) as any;
 
-  if (json.errors?.length) {
+  // Errors can be partial, such as one listing's field failing server-side,
+  // and arrive alongside usable data.
+  if (json.errors?.length && !json.data) {
     throw Object.assign(new Error(`Facebook GraphQL error: ${json.errors[0].message}`), {
       fatal: true,
     });
+  }
+  if (json.errors?.length) {
+    console.error('[facebook] partial graphql error, continuing with data:', json.errors[0].message);
   }
 
   return json;
@@ -132,6 +137,12 @@ export async function fetchSearchPage(url: string): Promise<string> {
     }
   }
   throw lastError;
+}
+
+/** Facebook answered, but with an error instead of data. Retrying the same
+ *  request will not help; a different route to the same results might. */
+export function isRefusal(err: unknown): boolean {
+  return (err as { fatal?: boolean } | null)?.fatal === true;
 }
 
 function isTransientNetworkError(err: any): boolean {

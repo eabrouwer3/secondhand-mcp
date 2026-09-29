@@ -14,7 +14,7 @@
  */
 
 import { BaseMarketplace } from '../base.js';
-import { SearchParams, SearchResult, ListingDetails, LocationCoordinates } from '../../types.js';
+import { Listing, SearchParams, SearchResult, ListingDetails, LocationCoordinates } from '../../types.js';
 import { getListingDetails } from './details.js';
 import { LocationResolver } from './locations.js';
 import { extractFeedUnitEdges, parseListings, readFeedUnits } from './parse.js';
@@ -26,8 +26,8 @@ import {
   searchPageUrl,
   searchVariables,
 } from './queries.js';
-import { isGatedVersion } from './route.js';
-import { fetchGraphQL, fetchSearchPage } from './transport.js';
+import { GraphAnswer, chooseAnswer, needsSearchPage } from './route.js';
+import { fetchGraphQL, fetchSearchPage, isRefusal } from './transport.js';
 
 export { DEFAULT_RADIUS_MILES } from './queries.js';
 
@@ -62,26 +62,20 @@ export class FacebookMarketplace extends BaseMarketplace {
         );
       }
 
-      const response = await fetchGraphQL(
-        SEARCH_DOC_ID,
-        searchVariables(query, coords, limit, prices, radiusMiles)
-      );
-      const graph = readFeedUnits(response.data?.marketplace_search?.feed_units, limit, showSold);
+      const graph = await searchGraphQL(query, coords, limit, prices, radiusMiles, showSold);
+      const page = needsSearchPage(graph, limit)
+        ? await this.searchViaPage(location, coords, query, limit, prices, showSold, radiusMiles)
+        : null;
 
-      let result: SearchResult | null = null;
-      if (isGatedVersion(graph, limit)) {
-        const page = await this.searchViaPage(location, coords, query, limit, prices, showSold, radiusMiles);
-        if (page && page.listings.length > graph.listings.length) {
-          result = page;
-        } else if (!page && graph.malformed && graph.listings.length === 0) {
-          return this.createError(
-            'Unexpected response structure from Facebook, and the search page could not be read either. The GraphQL doc_id may need updating.'
-          );
-        }
+      const answer = chooseAnswer(graph, page);
+      if (answer.kind === 'unreadable') {
+        return this.createError(
+          'Unexpected response structure from Facebook, and the search page could not be read either. The GraphQL doc_id may need updating.'
+        );
       }
+      if (answer.kind === 'failed') throw answer.error;
 
-      result ??= this.found(graph.listings);
-
+      const result = this.found(answer.listings);
       this.remember(cacheKey, result);
       return result;
     } catch (error) {
@@ -106,7 +100,7 @@ export class FacebookMarketplace extends BaseMarketplace {
     return getListingDetails(listingId);
   }
 
-  private found(listings: SearchResult['listings']): SearchResult {
+  private found(listings: Listing[]): SearchResult {
     return {
       marketplace: this.name,
       success: true,
@@ -131,7 +125,7 @@ export class FacebookMarketplace extends BaseMarketplace {
     prices: PriceBounds,
     showSold: boolean,
     radiusMiles: number
-  ): Promise<SearchResult | null> {
+  ): Promise<Listing[] | null> {
     try {
       const pageId = await this.locations.cityPageId(location, coords);
       if (!pageId) return null;
@@ -141,10 +135,31 @@ export class FacebookMarketplace extends BaseMarketplace {
         console.error('[facebook] search page had no marketplace_search payload');
         return null;
       }
-      return this.found(parseListings(edges, limit, showSold));
+      return parseListings(edges, limit, showSold);
     } catch (err: any) {
       console.error('[facebook] search page fallback failed:', err?.message ?? err);
       return null;
     }
+  }
+}
+
+async function searchGraphQL(
+  query: string,
+  coords: LocationCoordinates,
+  limit: number,
+  prices: PriceBounds,
+  radiusMiles: number,
+  showSold: boolean
+): Promise<GraphAnswer> {
+  try {
+    const response = await fetchGraphQL(SEARCH_DOC_ID, searchVariables(query, coords, limit, prices, radiusMiles));
+    return {
+      kind: 'read',
+      reading: readFeedUnits(response.data?.marketplace_search?.feed_units, limit, showSold),
+    };
+  } catch (error) {
+    if (!isRefusal(error)) throw error;
+    console.error('[facebook] graphql search refused:', (error as Error).message);
+    return { kind: 'failed', error };
   }
 }

@@ -9,7 +9,7 @@ const EARTH_RADIUS_MILES = 3958.8;
 
 export class LocationResolver {
   private coordsCache: Map<string, LocationCoordinates> = new Map();
-  private cityPageIdCache: Map<string, string | null> = new Map();
+  private cityPageIdCache: Map<string, string> = new Map();
 
   async coordinates(query: string): Promise<LocationCoordinates | null> {
     const local = lookupUsCity(query);
@@ -30,20 +30,25 @@ export class LocationResolver {
   /** The Marketplace city page for a location, only ever one near `near`. */
   async cityPageId(location: string, near: LocationCoordinates): Promise<string | null> {
     const key = location.toLowerCase().trim();
-    if (this.cityPageIdCache.has(key)) return this.cityPageIdCache.get(key)!;
+    const cached = this.cityPageIdCache.get(key);
+    if (cached) return cached;
 
-    let pageId: string | null = null;
     for (const candidate of candidates(location)) {
-      pageId = await nearbyCityPageId(candidate, near);
-      if (pageId) break;
+      const pageId = await nearbyCityPageId(candidate, near);
+      if (pageId) {
+        this.rememberCityPage(key, pageId);
+        return pageId;
+      }
     }
+    return null;
+  }
 
+  private rememberCityPage(key: string, pageId: string): void {
+    this.cityPageIdCache.set(key, pageId);
     if (this.cityPageIdCache.size > CITY_PAGE_CACHE_MAX) {
       const oldest = this.cityPageIdCache.keys().next().value;
       if (oldest !== undefined) this.cityPageIdCache.delete(oldest);
     }
-    this.cityPageIdCache.set(key, pageId);
-    return pageId;
   }
 
   private async coordinatesExact(cacheKey: string): Promise<LocationCoordinates | null> {

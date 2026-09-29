@@ -1,6 +1,9 @@
 import { parsePrice } from '../base.js';
 import { Listing } from '../../types.js';
 
+// Nodes Facebook uses to say something rather than to carry a listing.
+const INFORMATIONAL_NODES = new Set(['MarketplaceSearchFeedNoResults']);
+
 export interface FeedUnitsReading {
   listings: Listing[];
   malformed: boolean;
@@ -15,9 +18,14 @@ export function readFeedUnits(feedUnits: any, limit: number, showSold: boolean):
   const edges: any[] = feedUnits.edges;
   return {
     listings: parseListings(edges, limit, showSold),
-    malformed: edges.some((edge) => edge?.node && !edge.node.listing),
+    malformed: edges.some(isStub),
     hasNextPage: feedUnits.page_info?.has_next_page === true,
   };
+}
+
+function isStub(edge: any): boolean {
+  const node = edge?.node;
+  return Boolean(node) && !node.listing && !INFORMATIONAL_NODES.has(node.__typename);
 }
 
 export function parseListings(edges: any[], limit: number, showSold: boolean): Listing[] {

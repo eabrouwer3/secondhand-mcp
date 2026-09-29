@@ -533,6 +533,89 @@ describe('gated API version and the search page fallback', () => {
     });
   });
 
+  it('reads the search page when the search API refuses the request', async () => {
+    stubFetch((req) => {
+      if (req.url.includes('/marketplace/')) return html(pageHtml(['p1', 'p2']));
+      if (req.docId === LOCATION_DOC_ID) return json(cityPageBody);
+      return json({ errors: [{ message: 'doc_id not found' }] });
+    });
+
+    const result = await search();
+
+    expect(result.success).toBe(true);
+    expect(result.listings.map((l) => l.id)).toEqual(['p1', 'p2']);
+  });
+
+  it('serves an empty search page as an empty result when the search API refuses', async () => {
+    stubFetch((req) => {
+      if (req.url.includes('/marketplace/')) return html('<html>"marketplace_search":{"feed_units":{"edges":[]}}</html>');
+      if (req.docId === LOCATION_DOC_ID) return json(cityPageBody);
+      return new Response(null, { status: 404 });
+    });
+
+    const result = await search();
+
+    expect(result.success).toBe(true);
+    expect(result.listings).toEqual([]);
+  });
+
+  it('reports the refusal when the search page cannot be read either', async () => {
+    stubFetch((req) => {
+      if (req.url.includes('/marketplace/')) return html('<html>login</html>');
+      if (req.docId === LOCATION_DOC_ID) return json(cityPageBody);
+      return new Response(null, { status: 404 });
+    });
+
+    const result = await search();
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Facebook API returned status 404');
+  });
+
+  it('takes an explicit no-results answer at its word', async () => {
+    const { calls } = stubFetch(() => {
+      const body = searchBody([]);
+      body.data.marketplace_search.feed_units.edges.push({ node: { __typename: 'MarketplaceSearchFeedNoResults' } } as any);
+      return json(body);
+    });
+
+    const result = await search();
+
+    expect(result.success).toBe(true);
+    expect(result.listings).toEqual([]);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('keeps listings that arrive alongside a partial GraphQL error', async () => {
+    const { calls } = stubFetch(() =>
+      json({
+        ...searchBody(Array.from({ length: 6 }, (_, i) => item({ id: String(i) }))),
+        errors: [{ message: 'reverse_geocode failed' }],
+      })
+    );
+
+    const result = await search();
+
+    expect(result.listings).toHaveLength(6);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('looks the city page up again after a lookup that failed', async () => {
+    let lookupFails = true;
+    const { calls } = stubFetch((req) => {
+      if (req.url.includes('/marketplace/')) return html(pageHtml(['p1', 'p2']));
+      if (req.docId === LOCATION_DOC_ID) {
+        return lookupFails ? json({ errors: [{ message: 'try later' }] }) : json(cityPageBody);
+      }
+      return json(gatedSearchBody([item({ id: 'g1' })], true));
+    });
+    const facebook = new FacebookMarketplace();
+
+    expect((await facebook.search(BASE)).listings.map((l) => l.id)).toEqual(['g1']);
+    lookupFails = false;
+    expect((await facebook.search({ ...BASE, query: 'trek' })).listings.map((l) => l.id)).toEqual(['p1', 'p2']);
+  });
+
   it('carries the radius onto the search page url', async () => {
     const { calls } = stubFetch((req) => {
       if (req.url.includes('/marketplace/')) return html(pageHtml(['p1']));
@@ -590,25 +673,25 @@ describe('retries and the time budget', () => {
 
   it('does not retry a status outside the retryable set', async () => {
     useDeterministicBackoff();
-    const { mock } = stubFetch(() => new Response(null, { status: 404 }));
+    const { calls } = stubFetch(() => new Response(null, { status: 404 }));
 
     const pending = search();
     await vi.advanceTimersByTimeAsync(TOTAL_BUDGET_MS);
     const result = await pending;
 
-    expect(mock).toHaveBeenCalledTimes(1);
+    expect(calls.filter((c) => c.docId === SEARCH_DOC_ID)).toHaveLength(1);
     expect(result.error).toContain('404');
   });
 
   it('fails fast on a GraphQL error body', async () => {
     useDeterministicBackoff();
-    const { mock } = stubFetch(() => json({ errors: [{ message: 'Please try again later' }] }));
+    const { calls } = stubFetch(() => json({ errors: [{ message: 'Please try again later' }] }));
 
     const pending = search();
     await vi.advanceTimersByTimeAsync(TOTAL_BUDGET_MS);
     const result = await pending;
 
-    expect(mock).toHaveBeenCalledTimes(1);
+    expect(calls.filter((c) => c.docId === SEARCH_DOC_ID)).toHaveLength(1);
     expect(result.success).toBe(false);
     expect(result.error).toContain('Facebook GraphQL error: Please try again later');
   });
@@ -707,7 +790,7 @@ describe('search result cache', () => {
 
   it('does not cache a failed search', async () => {
     let failing = true;
-    const { mock } = stubFetch(() =>
+    const { calls } = stubFetch(() =>
       failing ? json({ errors: [{ message: 'Rate limited' }] }) : json(searchBody([item()]))
     );
     const facebook = new FacebookMarketplace();
@@ -715,7 +798,7 @@ describe('search result cache', () => {
     expect((await facebook.search(BASE)).success).toBe(false);
     failing = false;
     expect((await facebook.search(BASE)).success).toBe(true);
-    expect(mock).toHaveBeenCalledTimes(2);
+    expect(calls.filter((c) => c.docId === SEARCH_DOC_ID)).toHaveLength(2);
   });
 });
 
