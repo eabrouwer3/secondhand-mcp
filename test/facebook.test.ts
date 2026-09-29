@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FacebookMarketplace } from '../src/marketplaces/facebook.js';
+import { FacebookMarketplace } from '../src/marketplaces/facebook/index.js';
+import { LocationResolver } from '../src/marketplaces/facebook/locations.js';
 import type { SearchParams } from '../src/types.js';
 
-// facebook.ts builds a ProxyAgent from SMARTPROXY_URL at module evaluation.
+// The Facebook transport builds a ProxyAgent from SMARTPROXY_URL at module evaluation.
 vi.mock('undici', () => ({ ProxyAgent: class {} }));
 
 const GRAPHQL_URL = 'https://www.facebook.com/api/graphql/';
@@ -676,15 +677,13 @@ describe('FacebookMarketplace.healthCheck', () => {
 
   it('reports unhealthy rather than throwing when lookup blows up', async () => {
     stubFetch(() => { throw new Error('proxy exploded'); });
-    const fb = new FacebookMarketplace();
-    vi.spyOn(fb as any, 'resolveLocation').mockRejectedValue(new Error('proxy exploded'));
-    await expect(fb.healthCheck()).resolves.toBe(false);
+    vi.spyOn(LocationResolver.prototype, 'coordinates').mockRejectedValue(new Error('proxy exploded'));
+    await expect(new FacebookMarketplace().healthCheck()).resolves.toBe(false);
   });
 
   it('reports unhealthy when the location cannot be resolved at all', async () => {
-    const fb = new FacebookMarketplace();
-    vi.spyOn(fb as any, 'resolveLocation').mockResolvedValue(null);
-    await expect(fb.healthCheck()).resolves.toBe(false);
+    vi.spyOn(LocationResolver.prototype, 'coordinates').mockResolvedValue(null);
+    await expect(new FacebookMarketplace().healthCheck()).resolves.toBe(false);
   });
 });
 

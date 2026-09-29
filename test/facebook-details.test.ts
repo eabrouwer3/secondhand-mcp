@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { FacebookMarketplace } from '../src/marketplaces/facebook.js';
+import { FacebookMarketplace } from '../src/marketplaces/facebook/index.js';
 
 // facebook.ts builds a ProxyAgent from SMARTPROXY_URL at module evaluation.
 vi.mock('undici', () => ({ ProxyAgent: class {} }));
