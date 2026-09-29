@@ -1,6 +1,7 @@
 import { parsePrice } from '../base.js';
 import { Listing, ListingDetails } from '../../types.js';
 import { currencySymbol } from './currency.js';
+import { descriptionText } from './description.js';
 import { toFullResImageUrl } from './images.js';
 import { BrowseLocation, Item, ItemSummary } from './wire.js';
 
@@ -38,7 +39,7 @@ export function itemDetails(item: Item, requestedId: string): ListingDetails {
 
   return {
     id: item.itemId,
-    description: item.description ?? item.shortDescription ?? undefined,
+    description: itemDescription(item),
     images,
     location: placeText(item.itemLocation, ['city', 'stateOrProvince', 'country']),
     seller: item.seller?.username ?? undefined,
@@ -46,6 +47,11 @@ export function itemDetails(item: Item, requestedId: string): ListingDetails {
     isShippingOffered: Array.isArray(item.shippingOptions) && item.shippingOptions.length > 0,
     url: item.itemWebUrl ?? `https://www.ebay.com/itm/${requestedId}`,
   };
+}
+
+function itemDescription(item: Item): string | undefined {
+  if (item.description) return descriptionText(item.description);
+  return item.shortDescription ?? undefined;
 }
 
 function placeText(location: BrowseLocation | undefined, parts: Array<keyof BrowseLocation>): string | undefined {

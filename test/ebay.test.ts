@@ -609,7 +609,7 @@ describe('EbayMarketplace.getListingDetails', () => {
 
     expect(details).toEqual({
       id: 'v1|123456|0',
-      description: '<p>Full description</p>',
+      description: 'Full description',
       images: [
         'https://i.ebayimg.com/images/g/abc/s-l1600.jpg',
         'https://i.ebayimg.com/images/g/def/s-l1600.jpg',
@@ -620,6 +620,20 @@ describe('EbayMarketplace.getListingDetails', () => {
       isShippingOffered: true,
       url: 'https://www.ebay.de/itm/123456',
     });
+  });
+
+  it('reads the seller\'s HTML description as text', async () => {
+    install({
+      item: () =>
+        json({
+          itemId: 'v1|7|0',
+          description: '<div style="font-family:Arial"><h2>Specs</h2><table><tr><td><p>Make</p></td><td><p>Nintendo</p></td></tr></table><ul><li>Dock</li><li>Charger</li></ul></div>',
+        }),
+    });
+
+    const details = await market().getListingDetails('7');
+
+    expect(details.description).toBe('Specs\n\nMake Nintendo\n\n- Dock\n- Charger');
   });
 
   it('falls back to shortDescription and reports no shipping', async () => {
