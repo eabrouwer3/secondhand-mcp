@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { FacebookMarketplace } from '../src/marketplaces/facebook.js';
+import { FacebookMarketplace } from '../src/marketplaces/facebook/index.js';
 
-// facebook.ts builds a ProxyAgent from SMARTPROXY_URL at module evaluation.
+// The Facebook transport builds a ProxyAgent from SMARTPROXY_URL at module evaluation.
 vi.mock('undici', () => ({ ProxyAgent: class {} }));
 
 const GRAPHQL_URL = 'https://www.facebook.com/api/graphql/';
@@ -216,49 +216,84 @@ describe('detail parsing', () => {
     ['no details page', { data: { viewer: {} } }],
     ['no viewer', { data: {} }],
     ['no data', {}],
-  ])('still returns an identified listing when the response has %s', async (_label, body) => {
+  ])('fails rather than answer with an empty listing when the response has %s', async (_label, body) => {
     stubFetch(() => json(body));
 
-    const details = await getDetails('123');
-
-    expect(details).toEqual({
-      id: '123',
-      images: [],
-      url: 'https://www.facebook.com/marketplace/item/123',
-    });
+    await expect(getDetails('123')).rejects.toThrow('Facebook returned no listing 123');
   });
 });
 
 describe('detail failures', () => {
-  it('fails when the photos call fails', async () => {
+  it('fails for a listing Facebook no longer returns', async () => {
+    stubFetch(() => json({ ...detailsBody(null), errors: [{ message: 'not found' }] }));
+
+    await expect(getDetails()).rejects.toThrow('Facebook returned no listing 9182736');
+  });
+
+  it('marks the photos unavailable when only the photos call fails', async () => {
+    stubFetch(({ docId }) =>
+      docId === PHOTOS_DOC_ID ? new Response(null, { status: 404 }) : json(detailsBody(infoTarget()))
+    );
+
+    await expect(getDetails()).resolves.toMatchObject({ unavailable: ['photos'] });
+  });
+
+  it('marks the description unavailable when the info call returns no listing', async () => {
+    stubDetails(photosTarget([photo('https://cdn/a.jpg')]), null);
+
+    await expect(getDetails()).resolves.toMatchObject({ images: ['https://cdn/a.jpg'], unavailable: ['description'] });
+  });
+
+  it('marks nothing unavailable when both parts arrive', async () => {
+    stubDetails(photosTarget([]), infoTarget());
+
+    expect((await getDetails()).unavailable).toBeUndefined();
+  });
+
+  it('keeps the description and seller when the photos call fails', async () => {
     stubFetch(({ docId }) =>
       docId === PHOTOS_DOC_ID
         ? new Response(null, { status: 404 })
         : json(detailsBody(infoTarget()))
     );
 
-    await expect(getDetails()).rejects.toThrow('404');
+    const details = await getDetails();
+
+    expect(details.images).toEqual([]);
+    expect(details.description).toBe('Barely ridden, garage kept.');
+    expect(details.seller).toBe('Ada L.');
   });
 
-  it('fails when the info call fails', async () => {
+  it('keeps the photos when the info call fails', async () => {
     stubFetch(({ docId }) =>
       docId === INFO_DOC_ID
         ? new Response(null, { status: 403 })
-        : json(detailsBody(photosTarget([])))
+        : json(detailsBody(photosTarget([photo('https://cdn/a.jpg')])))
     );
 
-    await expect(getDetails()).rejects.toThrow('403');
+    const details = await getDetails();
+
+    expect(details.images).toEqual(['https://cdn/a.jpg']);
+    expect(details.description).toBeUndefined();
   });
 
-  it('surfaces a GraphQL error body from either call', async () => {
+  it('fails with the photos error when both calls fail', async () => {
+    stubFetch(({ docId }) =>
+      docId === PHOTOS_DOC_ID
+        ? new Response(null, { status: 404 })
+        : json({ errors: [{ message: 'Please try again later' }] })
+    );
+
+    await expect(getDetails()).rejects.toThrow('404');
+  });
+
+  it('reads the data that arrives alongside a partial GraphQL error', async () => {
     stubFetch(({ docId }) =>
       docId === INFO_DOC_ID
-        ? json({ errors: [{ message: 'Please try again later' }] })
+        ? json({ ...detailsBody(infoTarget()), errors: [{ message: 'field failed' }] })
         : json(detailsBody(photosTarget([])))
     );
 
-    await expect(getDetails()).rejects.toThrow(
-      'Facebook GraphQL error: Please try again later'
-    );
+    await expect(getDetails()).resolves.toMatchObject({ description: 'Barely ridden, garage kept.' });
   });
 });

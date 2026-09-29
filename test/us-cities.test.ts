@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lookupUsCity } from '../src/marketplaces/us-cities.js';
+import { lookupUsCity, stateNameForCode } from '../src/marketplaces/us-cities.js';
 
 function resolvedName(query: string): string | null {
   return lookupUsCity(query)?.name ?? null;
@@ -194,5 +194,19 @@ describe('famous non-US names', () => {
   it('suppresses bare "birmingham" even though the US city has 212k people', () => {
     expect(resolvedName('birmingham')).toBeNull();
     expect(resolvedName('birmingham, al')).toBe('Birmingham, AL');
+  });
+});
+
+describe('stateNameForCode', () => {
+  it.each([
+    ['nj', 'new jersey'],
+    ['NJ', 'new jersey'],
+    [' dc ', 'district of columbia'],
+  ])('spells out %j', (code, name) => {
+    expect(stateNameForCode(code)).toBe(name);
+  });
+
+  it.each(['zz', 'new jersey', 'on', ''])('leaves %j alone', (value) => {
+    expect(stateNameForCode(value)).toBeUndefined();
   });
 });

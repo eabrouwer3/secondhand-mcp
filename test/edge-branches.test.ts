@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { FacebookMarketplace } from '../src/marketplaces/facebook.js';
+import { FacebookMarketplace } from '../src/marketplaces/facebook/index.js';
 import { EbayMarketplace } from '../src/marketplaces/ebay.js';
 import { getBrowser } from '../src/browser.js';
 
@@ -47,12 +47,12 @@ const searchBody = (listings: unknown[]) => ({
   },
 });
 
-/** facebook.ts builds its dispatcher at module evaluation, so the env var has
+/** The Facebook transport builds its dispatcher at module evaluation, so the env var has
  *  to be in place before the import. */
 async function loadFacebook(smartproxyUrl?: string) {
   vi.stubEnv('SMARTPROXY_URL', smartproxyUrl);
   vi.resetModules();
-  return (await import('../src/marketplaces/facebook.js')).FacebookMarketplace;
+  return (await import('../src/marketplaces/facebook/index.js')).FacebookMarketplace;
 }
 
 describe('facebook proxy dispatcher', () => {

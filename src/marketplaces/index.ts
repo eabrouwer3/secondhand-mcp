@@ -3,14 +3,14 @@
  */
 
 import { Marketplace } from './base.js';
-import { FacebookMarketplace } from './facebook.js';
+import { FacebookMarketplace } from './facebook/index.js';
 import { EbayMarketplace } from './ebay.js';
 import { DepopMarketplace } from './depop.js';
 import { PoshmarkMarketplace } from './poshmark.js';
 import { findChrome } from '../browser.js';
 
 export { Marketplace, BaseMarketplace } from './base.js';
-export { FacebookMarketplace } from './facebook.js';
+export { FacebookMarketplace } from './facebook/index.js';
 export { EbayMarketplace, resizeEbayImageUrl } from './ebay.js';
 export { DepopMarketplace } from './depop.js';
 export { PoshmarkMarketplace } from './poshmark.js';

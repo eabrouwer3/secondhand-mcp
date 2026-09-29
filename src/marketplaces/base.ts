@@ -52,6 +52,16 @@ function parseAmount(raw: string): number {
   return parseFloat(`${plain.slice(0, plain.length - decimals)}.${plain.slice(plain.length - decimals)}`);
 }
 
+export function parsePrice(priceStr: string): { numeric: number; currency: string } | null {
+  const match = priceStr.match(PRICE_PATTERN);
+  if (!match) return null;
+
+  const currency = match[1] ?? match[2] ?? '$';
+  const numeric = parseAmount(match[3]);
+
+  return Number.isNaN(numeric) ? null : { numeric, currency };
+}
+
 export abstract class BaseMarketplace implements Marketplace {
   abstract readonly name: string;
   abstract readonly displayName: string;
@@ -64,13 +74,7 @@ export abstract class BaseMarketplace implements Marketplace {
   }
   
   protected parsePrice(priceStr: string): { numeric: number; currency: string } | null {
-    const match = priceStr.match(PRICE_PATTERN);
-    if (!match) return null;
-
-    const currency = match[1] ?? match[2] ?? '$';
-    const numeric = parseAmount(match[3]);
-
-    return Number.isNaN(numeric) ? null : { numeric, currency };
+    return parsePrice(priceStr);
   }
 
   protected createError(message: string): SearchResult {

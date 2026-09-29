@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FacebookMarketplace } from '../src/marketplaces/facebook.js';
+import { FacebookMarketplace } from '../src/marketplaces/facebook/index.js';
+import { LocationResolver } from '../src/marketplaces/facebook/locations.js';
 import type { SearchParams } from '../src/types.js';
 
-// facebook.ts builds a ProxyAgent from SMARTPROXY_URL at module evaluation.
+// The Facebook transport builds a ProxyAgent from SMARTPROXY_URL at module evaluation.
 vi.mock('undici', () => ({ ProxyAgent: class {} }));
 
 const GRAPHQL_URL = 'https://www.facebook.com/api/graphql/';
@@ -390,8 +391,8 @@ describe('gated API version and the search page fallback', () => {
       city_street_search: {
         street_results: {
           edges: [
-            { node: { subtitle: 'Venue · Somewhere', page: { id: 'venue' } } },
-            { node: { subtitle: 'City · California', page: { id: CITY_PAGE_ID } } },
+            { node: { subtitle: 'Venue · Somewhere', page: { id: 'venue' }, location: { latitude: 37.78, longitude: -122.41 } } },
+            { node: { subtitle: 'City · California', page: { id: CITY_PAGE_ID }, location: { latitude: 37.77, longitude: -122.42 } } },
           ],
         },
       },
@@ -478,6 +479,174 @@ describe('gated API version and the search page fallback', () => {
     expect(result.listings.map((l) => l.id)).toEqual(['only']);
   });
 
+  describe('city page for a place name shared across states', () => {
+    const cityPage = (id: string, state: string, latitude: number, longitude: number) => ({
+      node: { subtitle: `City · ${state}`, page: { id }, location: { latitude, longitude } },
+    });
+    const montclairCA = cityPage('montclair-ca', 'California', 34.08, -117.69);
+    const montclairNJ = cityPage('montclair-nj', 'New Jersey', 40.83, -74.21);
+
+    it('asks Facebook with the state spelled out and searches that state', async () => {
+      const { calls } = stubFetch((req) => {
+        if (req.url.includes('/marketplace/')) return html(pageHtml(['nj1']));
+        if (req.docId === LOCATION_DOC_ID) {
+          return json(locationBody(req.variables.params.query === 'montclair, new jersey' ? [montclairNJ] : [montclairCA]));
+        }
+        return json(gatedSearchBody([], true));
+      });
+
+      const result = await search({ location: 'Montclair, NJ' });
+
+      expect(calls.filter((c) => c.docId === LOCATION_DOC_ID)[0].variables.params.query).toBe('montclair, new jersey');
+      expect(calls.find((c) => c.url.includes('/marketplace/'))!.url).toContain('/marketplace/montclair-nj/search?');
+      expect(result.listings.map((l) => l.id)).toEqual(['nj1']);
+    });
+
+    it('never searches a same-named town in another state', async () => {
+      const { calls } = stubFetch((req) => {
+        if (req.url.includes('/marketplace/')) return html(pageHtml(['ca1']));
+        if (req.docId === LOCATION_DOC_ID) return json(locationBody([montclairCA]));
+        return json(gatedSearchBody([item({ id: 'g1' })], true));
+      });
+
+      const result = await search({ location: 'Montclair, NJ' });
+
+      expect(calls.some((c) => c.url.includes('/marketplace/'))).toBe(false);
+      expect(result.listings.map((l) => l.id)).toEqual(['g1']);
+    });
+
+    it('prefers the nearest page when several are close enough', async () => {
+      const { calls } = stubFetch((req) => {
+        if (req.url.includes('/marketplace/')) return html(pageHtml(['p1']));
+        if (req.docId === LOCATION_DOC_ID) {
+          return json(locationBody([
+            cityPage('oakland', 'California', 37.8, -122.27),
+            cityPage('san-francisco', 'California', 37.77, -122.42),
+          ]));
+        }
+        return json(gatedSearchBody([], true));
+      });
+
+      await search();
+
+      expect(calls.find((c) => c.url.includes('/marketplace/'))!.url).toContain('/marketplace/san-francisco/search?');
+    });
+  });
+
+  it('reads the search page when the search API refuses the request', async () => {
+    stubFetch((req) => {
+      if (req.url.includes('/marketplace/')) return html(pageHtml(['p1', 'p2']));
+      if (req.docId === LOCATION_DOC_ID) return json(cityPageBody);
+      return json({ errors: [{ message: 'doc_id not found' }] });
+    });
+
+    const result = await search();
+
+    expect(result.success).toBe(true);
+    expect(result.listings.map((l) => l.id)).toEqual(['p1', 'p2']);
+  });
+
+  it('reports the refusal when the search page holds only an empty placeholder', async () => {
+    stubFetch((req) => {
+      if (req.url.includes('/marketplace/')) return html('<html>"marketplace_search":{"feed_units":{"edges":[]}}</html>');
+      if (req.docId === LOCATION_DOC_ID) return json(cityPageBody);
+      return new Response(null, { status: 404 });
+    });
+
+    const result = await search();
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Facebook API returned status 404');
+  });
+
+  it('serves the search page\'s own no-results answer as empty when the search API refuses', async () => {
+    const noResults = JSON.stringify([{ node: { __typename: 'MarketplaceSearchFeedNoResults' } }]);
+    stubFetch((req) => {
+      if (req.url.includes('/marketplace/')) {
+        return html(`<html>{"marketplace_search":{"feed_units":{"edges":[]}}}{"marketplace_search":{"feed_units":{"edges":${noResults}}}}</html>`);
+      }
+      if (req.docId === LOCATION_DOC_ID) return json(cityPageBody);
+      return new Response(null, { status: 404 });
+    });
+
+    const result = await search();
+
+    expect(result.success).toBe(true);
+    expect(result.listings).toEqual([]);
+  });
+
+  it('does not answer a stub-only search with an empty placeholder page', async () => {
+    stubFetch((req) => {
+      if (req.url.includes('/marketplace/')) return html('<html>"marketplace_search":{"feed_units":{"edges":[]}}</html>');
+      if (req.docId === LOCATION_DOC_ID) return json(cityPageBody);
+      const body = searchBody([]);
+      body.data.marketplace_search.feed_units.edges.push({ node: { __typename: 'MarketplaceFeedStory' } } as any);
+      return json(body);
+    });
+
+    const result = await search();
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Unexpected response structure');
+  });
+
+  it('reports the refusal when the search page cannot be read either', async () => {
+    stubFetch((req) => {
+      if (req.url.includes('/marketplace/')) return html('<html>login</html>');
+      if (req.docId === LOCATION_DOC_ID) return json(cityPageBody);
+      return new Response(null, { status: 404 });
+    });
+
+    const result = await search();
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Facebook API returned status 404');
+  });
+
+  it('takes an explicit no-results answer at its word', async () => {
+    const { calls } = stubFetch(() => {
+      const body = searchBody([]);
+      body.data.marketplace_search.feed_units.edges.push({ node: { __typename: 'MarketplaceSearchFeedNoResults' } } as any);
+      return json(body);
+    });
+
+    const result = await search();
+
+    expect(result.success).toBe(true);
+    expect(result.listings).toEqual([]);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('keeps listings that arrive alongside a partial GraphQL error', async () => {
+    const { calls } = stubFetch(() =>
+      json({
+        ...searchBody(Array.from({ length: 6 }, (_, i) => item({ id: String(i) }))),
+        errors: [{ message: 'reverse_geocode failed' }],
+      })
+    );
+
+    const result = await search();
+
+    expect(result.listings).toHaveLength(6);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('looks the city page up again after a lookup that failed', async () => {
+    let lookupFails = true;
+    const { calls } = stubFetch((req) => {
+      if (req.url.includes('/marketplace/')) return html(pageHtml(['p1', 'p2']));
+      if (req.docId === LOCATION_DOC_ID) {
+        return lookupFails ? json({ errors: [{ message: 'try later' }] }) : json(cityPageBody);
+      }
+      return json(gatedSearchBody([item({ id: 'g1' })], true));
+    });
+    const facebook = new FacebookMarketplace();
+
+    expect((await facebook.search(BASE)).listings.map((l) => l.id)).toEqual(['g1']);
+    lookupFails = false;
+    expect((await facebook.search({ ...BASE, query: 'trek' })).listings.map((l) => l.id)).toEqual(['p1', 'p2']);
+  });
+
   it('carries the radius onto the search page url', async () => {
     const { calls } = stubFetch((req) => {
       if (req.url.includes('/marketplace/')) return html(pageHtml(['p1']));
@@ -535,25 +704,25 @@ describe('retries and the time budget', () => {
 
   it('does not retry a status outside the retryable set', async () => {
     useDeterministicBackoff();
-    const { mock } = stubFetch(() => new Response(null, { status: 404 }));
+    const { calls } = stubFetch(() => new Response(null, { status: 404 }));
 
     const pending = search();
     await vi.advanceTimersByTimeAsync(TOTAL_BUDGET_MS);
     const result = await pending;
 
-    expect(mock).toHaveBeenCalledTimes(1);
+    expect(calls.filter((c) => c.docId === SEARCH_DOC_ID)).toHaveLength(1);
     expect(result.error).toContain('404');
   });
 
   it('fails fast on a GraphQL error body', async () => {
     useDeterministicBackoff();
-    const { mock } = stubFetch(() => json({ errors: [{ message: 'Please try again later' }] }));
+    const { calls } = stubFetch(() => json({ errors: [{ message: 'Please try again later' }] }));
 
     const pending = search();
     await vi.advanceTimersByTimeAsync(TOTAL_BUDGET_MS);
     const result = await pending;
 
-    expect(mock).toHaveBeenCalledTimes(1);
+    expect(calls.filter((c) => c.docId === SEARCH_DOC_ID)).toHaveLength(1);
     expect(result.success).toBe(false);
     expect(result.error).toContain('Facebook GraphQL error: Please try again later');
   });
@@ -652,7 +821,7 @@ describe('search result cache', () => {
 
   it('does not cache a failed search', async () => {
     let failing = true;
-    const { mock } = stubFetch(() =>
+    const { calls } = stubFetch(() =>
       failing ? json({ errors: [{ message: 'Rate limited' }] }) : json(searchBody([item()]))
     );
     const facebook = new FacebookMarketplace();
@@ -660,7 +829,7 @@ describe('search result cache', () => {
     expect((await facebook.search(BASE)).success).toBe(false);
     failing = false;
     expect((await facebook.search(BASE)).success).toBe(true);
-    expect(mock).toHaveBeenCalledTimes(2);
+    expect(calls.filter((c) => c.docId === SEARCH_DOC_ID)).toHaveLength(2);
   });
 });
 
@@ -676,15 +845,13 @@ describe('FacebookMarketplace.healthCheck', () => {
 
   it('reports unhealthy rather than throwing when lookup blows up', async () => {
     stubFetch(() => { throw new Error('proxy exploded'); });
-    const fb = new FacebookMarketplace();
-    vi.spyOn(fb as any, 'resolveLocation').mockRejectedValue(new Error('proxy exploded'));
-    await expect(fb.healthCheck()).resolves.toBe(false);
+    vi.spyOn(LocationResolver.prototype, 'coordinates').mockRejectedValue(new Error('proxy exploded'));
+    await expect(new FacebookMarketplace().healthCheck()).resolves.toBe(false);
   });
 
   it('reports unhealthy when the location cannot be resolved at all', async () => {
-    const fb = new FacebookMarketplace();
-    vi.spyOn(fb as any, 'resolveLocation').mockResolvedValue(null);
-    await expect(fb.healthCheck()).resolves.toBe(false);
+    vi.spyOn(LocationResolver.prototype, 'coordinates').mockResolvedValue(null);
+    await expect(new FacebookMarketplace().healthCheck()).resolves.toBe(false);
   });
 });
 
