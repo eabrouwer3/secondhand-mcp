@@ -29,15 +29,13 @@ export function looksLikeImage(buf: Buffer): boolean {
   return false;
 }
 
-/** Fetches in batches, in listing order; a failed photo keeps its slot as `ok: false`. */
+/** Fetches in batches, in listing order; a failed photo keeps its slot and url as `ok: false`. */
 export async function fetchImages(urls: string[]): Promise<FetchedImage[]> {
   const fetched: FetchedImage[] = [];
   for (let i = 0; i < urls.length; i += FETCH_BATCH_SIZE) {
     const batch = urls.slice(i, i + FETCH_BATCH_SIZE);
     const settled = await Promise.allSettled(batch.map(fetchImage));
-    for (const s of settled) {
-      fetched.push(s.status === 'fulfilled' ? s.value : { url: '', ok: false });
-    }
+    settled.forEach((s, j) => fetched.push(s.status === 'fulfilled' ? s.value : { url: batch[j], ok: false }));
   }
   return fetched;
 }

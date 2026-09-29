@@ -1,6 +1,7 @@
 import { researchFetch, researchSearch } from './deep-research.js';
 import { listMarketplaces } from './list-marketplaces.js';
 import { listingDetails } from './listing-details.js';
+import { ArgumentError } from './arguments.js';
 import { ToolResult, errorResult } from './results.js';
 import { searchMarketplace } from './search-marketplace.js';
 
@@ -15,7 +16,13 @@ const HANDLERS: Record<string, (args: unknown) => Promise<ToolResult>> = {
   fetch: researchFetch,
 };
 
-export function callTool(name: string, args: unknown): Promise<ToolResult> {
+export async function callTool(name: string, args: unknown): Promise<ToolResult> {
   const handler = Object.hasOwn(HANDLERS, name) ? HANDLERS[name] : undefined;
-  return handler ? handler(args) : Promise.resolve(errorResult(`Unknown tool: ${name}`));
+  if (!handler) return errorResult(`Unknown tool: ${name}`);
+  try {
+    return await handler(args);
+  } catch (error) {
+    if (error instanceof ArgumentError) return errorResult(error.message);
+    throw error;
+  }
 }

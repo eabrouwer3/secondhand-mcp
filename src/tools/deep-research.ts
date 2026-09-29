@@ -3,6 +3,7 @@
 
 import { getAllMarketplaces } from '../marketplaces/index.js';
 import { Listing, SearchParams } from '../types.js';
+import { stringArg } from './arguments.js';
 import { detailsSource, unsupportedDetails } from './listing-details.js';
 import { ToolResult, errorResult, textResult } from './results.js';
 
@@ -16,7 +17,7 @@ interface ResearchResult {
 const TITLE_MAX_CHARS = 120;
 
 export async function researchSearch(args: unknown): Promise<ToolResult> {
-  const { query } = args as { query: string };
+  const query = stringArg(args, 'query');
   if (!query) return errorResult('Missing required parameter: query');
 
   const searchParams: SearchParams = { query, location: 'san francisco' };
@@ -52,8 +53,8 @@ function researchResult(marketplace: string, listing: Listing): ResearchResult {
 }
 
 export async function researchFetch(args: unknown): Promise<ToolResult> {
-  const { id } = args as { id: string };
-  const colonIdx = id ? id.indexOf(':') : -1;
+  const id = stringArg(args, 'id') ?? '';
+  const colonIdx = id.indexOf(':');
   if (colonIdx === -1) return errorResult('id must be in format marketplace:listingId');
 
   const marketplaceName = id.slice(0, colonIdx);

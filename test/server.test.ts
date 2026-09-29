@@ -322,6 +322,25 @@ describe('search_marketplace arguments', () => {
     expect(h.searchCalls[0].params.offset).toBe(0);
   });
 
+  it('reads numbers and booleans that arrive as strings', async () => {
+    h.impl.facebook = { search: () => ok('facebook', []) };
+    await call('search_marketplace', { query: 'chair', maxPrice: '50', minPrice: '10', radiusMiles: '40', showSold: 'false' });
+    expect(h.searchCalls[0].params).toMatchObject({ maxPrice: 50, minPrice: 10, radius: 40, showSold: false });
+  });
+
+  it('keeps photo counts rather than URLs when includeImages is the string "false"', async () => {
+    h.impl.facebook = { search: () => ok('facebook', [listing({ images: ['https://cdn/1.jpg'] })]) };
+    const text = textOf(await call('search_marketplace', { query: 'chair', includeImages: 'false' }));
+    expect(text).toContain('📷 1 photo');
+  });
+
+  it('rejects an argument of the wrong type instead of searching with it', async () => {
+    const res = await call('search_marketplace', { query: 'chair', maxPrice: 'fifty' });
+    expect(res.isError).toBe(true);
+    expect(textOf(res)).toBe('maxPrice must be a number');
+    expect(h.searchCalls).toEqual([]);
+  });
+
   it('rejects a missing query instead of searching for undefined', async () => {
     h.impl.facebook = { search: () => ok('facebook', []) };
     const res = await call('search_marketplace', {});
@@ -439,6 +458,18 @@ describe('get_listing_details', () => {
     h.impl[name] = { details: () => details({ url: `https://${name}/1` }) };
     await call('get_listing_details', { listingId: '1', marketplace: name });
     expect(h.detailCalls).toEqual([{ marketplace: name, id: '1' }]);
+  });
+
+  it('accepts a numeric listing id', async () => {
+    h.impl.ebay = { details: () => details() };
+    await call('get_listing_details', { listingId: 123456, marketplace: 'ebay' });
+    expect(h.detailCalls).toEqual([{ marketplace: 'ebay', id: '123456' }]);
+  });
+
+  it('rejects an image mode it does not know', async () => {
+    const res = await call('get_listing_details', { listingId: '1', imageMode: 'base64' });
+    expect(res.isError).toBe(true);
+    expect(textOf(res)).toBe('imageMode must be one of: urls, inline');
   });
 
   it('defaults to facebook when no marketplace is given', async () => {
@@ -573,6 +604,45 @@ describe('get_listing_details', () => {
     expect(text).toContain('🖼️ 1 of 2 photo(s) inline (standard)');
     expect(text).toContain('1 photo(s) could not be fetched server-side');
     expect(text).toContain('https://cdn/2.jpg#800');
+  });
+
+  it('lists a photo whose fetch timed out among the ones to fetch directly', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.startsWith('https://cdn/2')) throw Object.assign(new Error('timed out'), { name: 'TimeoutError' });
+        return jpegResponse();
+      }),
+    );
+    h.impl.ebay = { details: () => details({ images: ['https://cdn/1.jpg', 'https://cdn/2.jpg'] }) };
+
+    const text = textOf(await call('get_listing_details', { listingId: '1', marketplace: 'ebay', imageMode: 'inline' }));
+
+    expect(text).toContain('1 photo(s) could not be fetched server-side');
+    expect(text).toContain('1. https://cdn/2.jpg#800');
+  });
+
+  it('returns the listing without photos when maxImages is 0', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    h.impl.ebay = {
+      details: () => details({ description: 'Oak desk', images: ['https://cdn/1.jpg', 'https://cdn/2.jpg'] }),
+    };
+
+    const text = textOf(
+      await call('get_listing_details', { listingId: '1', marketplace: 'ebay', imageMode: 'inline', maxImages: 0 }),
+    );
+
+    expect(text).toContain('**Description:** Oak desk');
+    expect(text).toContain('📷 2 photos, not included (maxImages is 0)');
+    expect(text).not.toContain('https://cdn/');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a negative maxImages', async () => {
+    const res = await call('get_listing_details', { listingId: '1', maxImages: -2 });
+    expect(res.isError).toBe(true);
+    expect(textOf(res)).toBe('maxImages must be a whole number, 0 or more');
   });
 
   it('rejects a non-image body served with an image content-type', async () => {
@@ -910,6 +980,15 @@ describe('inline image batching', () => {
 });
 
 describe('single-marketplace result formatting', () => {
+  it('links every listing', async () => {
+    h.impl.facebook = {
+      search: () => ok('facebook', [listing({ id: 'a', url: 'https://fb/a' }), listing({ id: 'b', url: 'https://fb/b' })]),
+    };
+    const text = textOf(await call('search_marketplace', { query: 'chair' }));
+    expect(text).toContain('🆔 a\n   🔗 https://fb/a');
+    expect(text).toContain('🆔 b\n   🔗 https://fb/b');
+  });
+
   it('prints no photo line at all for a listing without images', async () => {
     h.impl.facebook = { search: () => ok('facebook', [listing({ images: undefined })]) };
     const text = textOf(await call('search_marketplace', { query: 'chair' }));
@@ -944,6 +1023,12 @@ describe('single-marketplace result formatting', () => {
 });
 
 describe('all-marketplace result formatting', () => {
+  it('links every listing', async () => {
+    h.impl.facebook = { search: () => ok('facebook', [listing({ id: 'a', url: 'https://fb/a' })]) };
+    const text = textOf(await call('search_marketplace', { query: 'chair', marketplace: 'all' }));
+    expect(text).toContain('    🆔 a\n    🔗 https://fb/a');
+  });
+
   it('pluralises the photo count and omits the line when a listing has none', async () => {
     h.impl.facebook = {
       search: () =>

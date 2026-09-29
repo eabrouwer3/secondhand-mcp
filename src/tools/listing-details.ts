@@ -1,13 +1,16 @@
 import { getMarketplace, listMarketplaceNames, resizeEbayImageUrl } from '../marketplaces/index.js';
 import { ListingDetails } from '../types.js';
+import { booleanArg, choiceArg, countArg, stringArg } from './arguments.js';
 import { formatListingDetails } from './format.js';
 import { FetchedImage, IMAGE_SIZE_PX, ImageSize, fetchImages } from './images.js';
 import { ToolContent, ToolResult, errorResult, textResult } from './results.js';
 
-type ImageMode = 'urls' | 'inline';
+const IMAGE_MODES = ['urls', 'inline'] as const;
+type ImageMode = (typeof IMAGE_MODES)[number];
+const IMAGE_SIZES = Object.keys(IMAGE_SIZE_PX) as ImageSize[];
 
 interface ListingDetailsArgs {
-  listingId: string;
+  listingId?: string;
   marketplace?: string;
   imageMode?: ImageMode;
   includeImages?: boolean;
@@ -32,7 +35,7 @@ export function unsupportedDetails(name: string): ToolResult {
 }
 
 export async function listingDetails(args: unknown): Promise<ToolResult> {
-  const { listingId, marketplace, imageMode, includeImages, imageSize, maxImages } = args as ListingDetailsArgs;
+  const { listingId, marketplace, imageMode, includeImages, imageSize, maxImages } = readArgs(args);
   if (!listingId) return errorResult('Missing required parameter: listingId');
 
   const targetMp = marketplace || 'facebook';
@@ -42,6 +45,7 @@ export async function listingDetails(args: unknown): Promise<ToolResult> {
   try {
     const details = await source.getListingDetails(listingId);
     if (details.images.length === 0) return textResult(formatListingDetails(details));
+    if (maxImages === 0) return textResult(withoutPhotos(details) + photosLeftOutText(details.images.length));
 
     const mode: ImageMode = imageMode ?? (includeImages ? 'inline' : 'urls');
     // URL mode defaults to full res (client fetches directly, no payload cost
@@ -53,6 +57,17 @@ export async function listingDetails(args: unknown): Promise<ToolResult> {
   } catch (error) {
     return errorResult(`Error fetching listing details: ${error}`);
   }
+}
+
+function readArgs(args: unknown): ListingDetailsArgs {
+  return {
+    listingId: stringArg(args, 'listingId'),
+    marketplace: stringArg(args, 'marketplace'),
+    imageMode: choiceArg(args, 'imageMode', IMAGE_MODES),
+    includeImages: booleanArg(args, 'includeImages'),
+    imageSize: choiceArg(args, 'imageSize', IMAGE_SIZES),
+    maxImages: countArg(args, 'maxImages'),
+  };
 }
 
 interface PhotoSelection {
@@ -78,6 +93,10 @@ function photoUrlsText({ urls, total, size }: PhotoSelection): string {
   const markdown = urls.map((u, i) => `![Photo ${i + 1}](${u})`).join('\n');
   const count = `${urls.length}${urls.length < total ? ` of ${total}` : ''}`;
   return `\n\n🖼️ Photos (${count}, ${size}) — full-resolution CDN URLs, fetch directly:\n${numbered}\n\n${markdown}`;
+}
+
+function photosLeftOutText(total: number): string {
+  return `\n\n📷 ${total} photo${total > 1 ? 's' : ''}, not included (maxImages is 0)`;
 }
 
 function urlsReply(details: ListingDetails, photos: PhotoSelection): ToolResult {
@@ -107,7 +126,7 @@ async function inlineReply(details: ListingDetails, photos: PhotoSelection): Pro
 }
 
 function failedPhotosNote(fetched: FetchedImage[]): string {
-  const failed = fetched.filter((r) => !r.ok && r.url);
+  const failed = fetched.filter((r) => !r.ok);
   if (failed.length === 0) return '';
   return (
     `\n\n⚠️ ${failed.length} photo(s) could not be fetched server-side — fetch these directly:\n` +

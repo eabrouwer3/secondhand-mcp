@@ -1,10 +1,11 @@
 import { getAllMarketplaces, getMarketplace, listMarketplaceNames } from '../marketplaces/index.js';
 import { SearchParams, SearchResult } from '../types.js';
+import { booleanArg, numberArg, stringArg, stringListArg } from './arguments.js';
 import { formatMultipleResults, formatSingleResult } from './format.js';
 import { ToolResult, errorResult, textResult } from './results.js';
 
 interface SearchMarketplaceArgs {
-  query: string;
+  query?: string;
   marketplace?: string;
   location?: string;
   radiusMiles?: number;
@@ -24,10 +25,10 @@ interface SearchMarketplaceArgs {
 }
 
 export async function searchMarketplace(args: unknown): Promise<ToolResult> {
-  const params = args as SearchMarketplaceArgs;
+  const params = readArgs(args);
   if (!params.query) return errorResult('Missing required parameter: query');
 
-  const searchParams = toSearchParams(params);
+  const searchParams = toSearchParams({ ...params, query: params.query });
   const includeImages = params.includeImages || false;
   const marketplaceName = params.marketplace || 'facebook';
 
@@ -49,7 +50,29 @@ export async function searchMarketplace(args: unknown): Promise<ToolResult> {
   }
 }
 
-function toSearchParams(params: SearchMarketplaceArgs): SearchParams {
+function readArgs(args: unknown): SearchMarketplaceArgs {
+  return {
+    query: stringArg(args, 'query'),
+    marketplace: stringArg(args, 'marketplace'),
+    location: stringArg(args, 'location'),
+    radiusMiles: numberArg(args, 'radiusMiles'),
+    maxPrice: numberArg(args, 'maxPrice'),
+    minPrice: numberArg(args, 'minPrice'),
+    limit: numberArg(args, 'limit'),
+    offset: numberArg(args, 'offset'),
+    showSold: booleanArg(args, 'showSold'),
+    includeImages: booleanArg(args, 'includeImages'),
+    sort: stringArg(args, 'sort'),
+    condition: stringArg(args, 'condition'),
+    category: stringArg(args, 'category'),
+    brand: stringArg(args, 'brand'),
+    department: stringArg(args, 'department'),
+    sizes: stringListArg(args, 'sizes'),
+    colors: stringListArg(args, 'colors'),
+  };
+}
+
+function toSearchParams(params: SearchMarketplaceArgs & { query: string }): SearchParams {
   return {
     query: params.query,
     location: params.location || 'san francisco',
