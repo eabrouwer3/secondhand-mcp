@@ -17,7 +17,7 @@ import { BaseMarketplace } from '../base.js';
 import { Listing, SearchParams, SearchResult, ListingDetails, LocationCoordinates } from '../../types.js';
 import { getListingDetails } from './details.js';
 import { LocationResolver } from './locations.js';
-import { extractFeedUnitEdges, parseListings, readFeedUnits } from './parse.js';
+import { extractFeedUnitEdges, pageAnswered, parseListings, readFeedUnits } from './parse.js';
 import {
   API_PAGE_SIZE,
   PriceBounds,
@@ -132,8 +132,8 @@ export class FacebookMarketplace extends BaseMarketplace {
       if (!pageId) return null;
       const html = await fetchSearchPage(searchPageUrl(pageId, query, prices, radiusMiles));
       const edges = extractFeedUnitEdges(html);
-      if (!edges) {
-        console.error('[facebook] search page had no marketplace_search payload');
+      if (!edges || !pageAnswered(edges)) {
+        console.error('[facebook] search page had no results payload');
         return null;
       }
       return parseListings(edges, limit, showSold);

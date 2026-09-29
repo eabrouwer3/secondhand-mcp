@@ -29,8 +29,17 @@ export function readFeedUnits(
 }
 
 function isStub(edge: FeedEdge | null): boolean {
-  const node = edge?.node;
-  return Boolean(node) && !node?.listing && !INFORMATIONAL_NODES.has(node?.__typename ?? '');
+  return Boolean(edge?.node) && !edge?.node?.listing && !isInformational(edge);
+}
+
+function isInformational(edge: FeedEdge | null): boolean {
+  return INFORMATIONAL_NODES.has(edge?.node?.__typename ?? '');
+}
+
+/** Whether a page's edges say anything: listings, or an explicit no-results.
+ *  The page also carries empty placeholder feeds, which say nothing. */
+export function pageAnswered(edges: FeedEdge[]): boolean {
+  return edges.some((edge) => edge?.node?.listing || isInformational(edge));
 }
 
 export function parseListings(edges: Array<FeedEdge | null>, limit: number, showSold: boolean): Listing[] {
@@ -94,7 +103,7 @@ function listingLocation(listing: FeedListing): string | undefined {
 // manifests) besides the real one, in an order that varies by variant.
 export function extractFeedUnitEdges(html: string): FeedEdge[] | null {
   let best: FeedEdge[] | null = null;
-  let bestListings = -1;
+  let bestRank: [number, number] = [-1, -1];
   for (
     let anchor = html.indexOf('"feed_units"');
     anchor !== -1;
@@ -104,13 +113,22 @@ export function extractFeedUnitEdges(html: string): FeedEdge[] | null {
     if (edgesAt === -1 || edgesAt > anchor + 200) continue;
     const edges = extractJsonArray(html, html.indexOf('[', edgesAt)) as FeedEdge[] | null;
     if (!edges) continue;
-    const withListing = edges.filter((e) => e?.node?.listing).length;
-    if (withListing > bestListings) {
+    const rank = pageRank(edges);
+    if (outranks(rank, bestRank)) {
       best = edges;
-      bestListings = withListing;
+      bestRank = rank;
     }
   }
   return best;
+}
+
+/** Listings first; between feeds with none, an explicit no-results wins. */
+function pageRank(edges: FeedEdge[]): [number, number] {
+  return [edges.filter((e) => e?.node?.listing).length, edges.some(isInformational) ? 1 : 0];
+}
+
+function outranks([listings, informs]: [number, number], [bestListings, bestInforms]: [number, number]): boolean {
+  return listings > bestListings || (listings === bestListings && informs > bestInforms);
 }
 
 // Balanced-bracket scan; string-aware because listing titles contain brackets.

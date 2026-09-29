@@ -546,7 +546,7 @@ describe('gated API version and the search page fallback', () => {
     expect(result.listings.map((l) => l.id)).toEqual(['p1', 'p2']);
   });
 
-  it('serves an empty search page as an empty result when the search API refuses', async () => {
+  it('reports the refusal when the search page holds only an empty placeholder', async () => {
     stubFetch((req) => {
       if (req.url.includes('/marketplace/')) return html('<html>"marketplace_search":{"feed_units":{"edges":[]}}</html>');
       if (req.docId === LOCATION_DOC_ID) return json(cityPageBody);
@@ -555,8 +555,39 @@ describe('gated API version and the search page fallback', () => {
 
     const result = await search();
 
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Facebook API returned status 404');
+  });
+
+  it('serves the search page\'s own no-results answer as empty when the search API refuses', async () => {
+    const noResults = JSON.stringify([{ node: { __typename: 'MarketplaceSearchFeedNoResults' } }]);
+    stubFetch((req) => {
+      if (req.url.includes('/marketplace/')) {
+        return html(`<html>{"marketplace_search":{"feed_units":{"edges":[]}}}{"marketplace_search":{"feed_units":{"edges":${noResults}}}}</html>`);
+      }
+      if (req.docId === LOCATION_DOC_ID) return json(cityPageBody);
+      return new Response(null, { status: 404 });
+    });
+
+    const result = await search();
+
     expect(result.success).toBe(true);
     expect(result.listings).toEqual([]);
+  });
+
+  it('does not answer a stub-only search with an empty placeholder page', async () => {
+    stubFetch((req) => {
+      if (req.url.includes('/marketplace/')) return html('<html>"marketplace_search":{"feed_units":{"edges":[]}}</html>');
+      if (req.docId === LOCATION_DOC_ID) return json(cityPageBody);
+      const body = searchBody([]);
+      body.data.marketplace_search.feed_units.edges.push({ node: { __typename: 'MarketplaceFeedStory' } } as any);
+      return json(body);
+    });
+
+    const result = await search();
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Unexpected response structure');
   });
 
   it('reports the refusal when the search page cannot be read either', async () => {
