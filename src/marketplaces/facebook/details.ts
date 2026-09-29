@@ -1,11 +1,12 @@
 import { ListingDetails } from '../../types.js';
 import { DETAIL_INFO_DOC_ID, DETAIL_PHOTOS_DOC_ID, detailInfoVariables, detailPhotosVariables } from './queries.js';
 import { fetchGraphQL } from './transport.js';
+import { DetailData, DetailTarget, GraphQLResponse } from './wire.js';
 
 export async function getListingDetails(listingId: string): Promise<ListingDetails> {
   const [photos, info] = await Promise.allSettled([
-    fetchGraphQL(DETAIL_PHOTOS_DOC_ID, detailPhotosVariables(listingId)),
-    fetchGraphQL(DETAIL_INFO_DOC_ID, detailInfoVariables(listingId)),
+    fetchGraphQL<DetailData>(DETAIL_PHOTOS_DOC_ID, detailPhotosVariables(listingId)),
+    fetchGraphQL<DetailData>(DETAIL_INFO_DOC_ID, detailInfoVariables(listingId)),
   ]);
   if (photos.status === 'rejected' && info.status === 'rejected') throw photos.reason;
 
@@ -26,17 +27,19 @@ export async function getListingDetails(listingId: string): Promise<ListingDetai
 }
 
 /** One request's share of the listing; a failed one leaves its fields empty. */
-function detailsTarget(settled: PromiseSettledResult<any>, part: string): any {
+function detailsTarget(
+  settled: PromiseSettledResult<GraphQLResponse<DetailData>>,
+  part: string
+): DetailTarget | undefined {
   if (settled.status === 'rejected') {
     console.error(`[facebook] listing ${part} request failed:`, settled.reason?.message ?? settled.reason);
     return undefined;
   }
-  return settled.value?.data?.viewer?.marketplace_product_details_page?.target;
+  return settled.value.data?.viewer?.marketplace_product_details_page?.target ?? undefined;
 }
 
-function photoUris(photosTarget: any): string[] {
-  if (!Array.isArray(photosTarget?.listing_photos)) return [];
-  return photosTarget.listing_photos
-    .map((photo: any) => photo?.image?.uri)
-    .filter((uri: unknown): uri is string => Boolean(uri));
+function photoUris(photosTarget: DetailTarget | undefined): string[] {
+  const photos = photosTarget?.listing_photos;
+  if (!Array.isArray(photos)) return [];
+  return photos.flatMap((photo) => (photo?.image?.uri ? [photo.image.uri] : []));
 }

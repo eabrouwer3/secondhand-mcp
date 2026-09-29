@@ -12,7 +12,7 @@ export type SearchAnswer =
   | { kind: 'unreadable' }
   | { kind: 'failed'; error: unknown };
 
-export function isGatedVersion(graph: FeedUnitsReading, limit: number): boolean {
+function isGatedVersion(graph: FeedUnitsReading, limit: number): boolean {
   const thin = graph.listings.length < Math.min(limit, MIN_TRUSTED_LISTINGS);
   return thin && (graph.malformed || graph.hasNextPage);
 }

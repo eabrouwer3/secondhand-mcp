@@ -1,4 +1,5 @@
 import { ProxyAgent } from 'undici';
+import { GraphQLResponse } from './wire.js';
 
 const GRAPHQL_URL = 'https://www.facebook.com/api/graphql/';
 
@@ -33,21 +34,25 @@ const proxyAgent = process.env.SMARTPROXY_URL
   ? new ProxyAgent(process.env.SMARTPROXY_URL)
   : undefined;
 
-export async function fetchGraphQL(docId: string, variables: string): Promise<any> {
+/** Facebook answered, but with an error instead of data. Retrying the same
+ *  request will not help; a different route to the same results might. */
+export class RefusalError extends Error {}
+
+export async function fetchGraphQL<T>(docId: string, variables: string): Promise<GraphQLResponse<T>> {
   const body = new URLSearchParams({
     variables,
     doc_id: docId,
   });
 
   const deadline = Date.now() + TOTAL_BUDGET_MS;
-  let lastError: Error | undefined;
+  let lastError: unknown;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const remaining = deadline - Date.now();
     let expiry: ReturnType<typeof setTimeout> | undefined;
 
     try {
-      const running = attemptGraphQL(body, Math.min(ATTEMPT_TIMEOUT_MS, remaining));
+      const running = attemptGraphQL<T>(body, Math.min(ATTEMPT_TIMEOUT_MS, remaining));
       // A transport that is slow to honour its abort would otherwise carry an
       // attempt past the deadline; losing this race is what caps elapsed time.
       running.catch(() => {});
@@ -64,8 +69,8 @@ export async function fetchGraphQL(docId: string, variables: string): Promise<an
       });
 
       return await Promise.race([running, expired]);
-    } catch (err: any) {
-      if (err?.fatal) throw err;
+    } catch (err) {
+      if (err instanceof RefusalError) throw err;
       lastError = err;
 
       const backoff = 1000 * 2 ** (attempt - 1) * (0.5 + Math.random());
@@ -79,7 +84,7 @@ export async function fetchGraphQL(docId: string, variables: string): Promise<an
   throw lastError ?? new Error('Facebook request failed');
 }
 
-async function attemptGraphQL(body: URLSearchParams, timeoutMs: number): Promise<any> {
+async function attemptGraphQL<T>(body: URLSearchParams, timeoutMs: number): Promise<GraphQLResponse<T>> {
   const response = await fetch(GRAPHQL_URL, {
     method: 'POST',
     headers: GRAPHQL_HEADERS,
@@ -93,19 +98,15 @@ async function attemptGraphQL(body: URLSearchParams, timeoutMs: number): Promise
     throw new Error(`Facebook API returned status ${response.status}`);
   }
   if (!response.ok) {
-    throw Object.assign(new Error(`Facebook API returned status ${response.status}`), {
-      fatal: true,
-    });
+    throw new RefusalError(`Facebook API returned status ${response.status}`);
   }
 
-  const json = (await response.json()) as any;
+  const json = (await response.json()) as GraphQLResponse<T>;
 
   // Errors can be partial, such as one listing's field failing server-side,
   // and arrive alongside usable data.
   if (json.errors?.length && !json.data) {
-    throw Object.assign(new Error(`Facebook GraphQL error: ${json.errors[0].message}`), {
-      fatal: true,
-    });
+    throw new RefusalError(`Facebook GraphQL error: ${json.errors[0].message}`);
   }
   if (json.errors?.length) {
     console.error('[facebook] partial graphql error, continuing with data:', json.errors[0].message);
@@ -139,12 +140,7 @@ export async function fetchSearchPage(url: string): Promise<string> {
   throw lastError;
 }
 
-/** Facebook answered, but with an error instead of data. Retrying the same
- *  request will not help; a different route to the same results might. */
-export function isRefusal(err: unknown): boolean {
-  return (err as { fatal?: boolean } | null)?.fatal === true;
-}
-
-function isTransientNetworkError(err: any): boolean {
-  return err?.name === 'TimeoutError' || /fetch failed|aborted|socket|ECONN/i.test(err?.message ?? '');
+function isTransientNetworkError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return err.name === 'TimeoutError' || /fetch failed|aborted|socket|ECONN/i.test(err.message);
 }

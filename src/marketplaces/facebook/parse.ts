@@ -1,5 +1,6 @@
 import { parsePrice } from '../base.js';
 import { Listing } from '../../types.js';
+import { FeedEdge, FeedListing, FeedUnits } from './wire.js';
 
 // Nodes Facebook uses to say something rather than to carry a listing.
 const INFORMATIONAL_NODES = new Set(['MarketplaceSearchFeedNoResults']);
@@ -10,12 +11,16 @@ export interface FeedUnitsReading {
   hasNextPage: boolean;
 }
 
-export function readFeedUnits(feedUnits: any, limit: number, showSold: boolean): FeedUnitsReading {
+export function readFeedUnits(
+  feedUnits: FeedUnits | null | undefined,
+  limit: number,
+  showSold: boolean
+): FeedUnitsReading {
   if (!feedUnits?.edges) {
     console.error('[facebook] unexpected graphql response structure');
     return { listings: [], malformed: true, hasNextPage: false };
   }
-  const edges: any[] = feedUnits.edges;
+  const edges = feedUnits.edges;
   return {
     listings: parseListings(edges, limit, showSold),
     malformed: edges.some(isStub),
@@ -23,12 +28,12 @@ export function readFeedUnits(feedUnits: any, limit: number, showSold: boolean):
   };
 }
 
-function isStub(edge: any): boolean {
+function isStub(edge: FeedEdge | null): boolean {
   const node = edge?.node;
-  return Boolean(node) && !node.listing && !INFORMATIONAL_NODES.has(node.__typename);
+  return Boolean(node) && !node?.listing && !INFORMATIONAL_NODES.has(node?.__typename ?? '');
 }
 
-export function parseListings(edges: any[], limit: number, showSold: boolean): Listing[] {
+export function parseListings(edges: Array<FeedEdge | null>, limit: number, showSold: boolean): Listing[] {
   const listings: Listing[] = [];
 
   for (const edge of edges) {
@@ -55,7 +60,7 @@ export function parseListings(edges: any[], limit: number, showSold: boolean): L
         location: listingLocation(listing),
         url: `https://www.facebook.com/marketplace/item/${listing.id}`,
         images: imageUri ? [imageUri] : undefined,
-        seller: listing.marketplace_listing_seller?.name,
+        seller: listing.marketplace_listing_seller?.name ?? undefined,
         marketplace: 'facebook',
         scrapedAt: new Date().toISOString(),
       });
@@ -67,7 +72,7 @@ export function parseListings(edges: any[], limit: number, showSold: boolean): L
   return listings;
 }
 
-function isUnavailable(listing: any): boolean {
+function isUnavailable(listing: FeedListing): boolean {
   if (listing.is_sold === true) return true;
   if (listing.is_live === false) return true;
   if (listing.is_pending === true) return true;
@@ -78,7 +83,7 @@ function isUnavailable(listing: any): boolean {
   return title.startsWith('[SOLD]') || title.startsWith('SOLD -') || title === 'SOLD';
 }
 
-function listingLocation(listing: any): string | undefined {
+function listingLocation(listing: FeedListing): string | undefined {
   const geo = listing.location?.reverse_geocode;
   if (geo?.city_page?.display_name) return geo.city_page.display_name;
   if (geo?.city) return [geo.city, geo.state].filter(Boolean).join(', ');
@@ -87,8 +92,8 @@ function listingLocation(listing: any): string | undefined {
 
 // The page embeds several feed_units payloads (preloader shells, module
 // manifests) besides the real one, in an order that varies by variant.
-export function extractFeedUnitEdges(html: string): any[] | null {
-  let best: any[] | null = null;
+export function extractFeedUnitEdges(html: string): FeedEdge[] | null {
+  let best: FeedEdge[] | null = null;
   let bestListings = -1;
   for (
     let anchor = html.indexOf('"feed_units"');
@@ -97,9 +102,9 @@ export function extractFeedUnitEdges(html: string): any[] | null {
   ) {
     const edgesAt = html.indexOf('"edges":', anchor);
     if (edgesAt === -1 || edgesAt > anchor + 200) continue;
-    const edges = extractJsonArray(html, html.indexOf('[', edgesAt));
+    const edges = extractJsonArray(html, html.indexOf('[', edgesAt)) as FeedEdge[] | null;
     if (!edges) continue;
-    const withListing = edges.filter((e: any) => e?.node?.listing).length;
+    const withListing = edges.filter((e) => e?.node?.listing).length;
     if (withListing > bestListings) {
       best = edges;
       bestListings = withListing;
@@ -109,7 +114,7 @@ export function extractFeedUnitEdges(html: string): any[] | null {
 }
 
 // Balanced-bracket scan; string-aware because listing titles contain brackets.
-function extractJsonArray(html: string, start: number): any[] | null {
+function extractJsonArray(html: string, start: number): unknown[] | null {
   if (start === -1) return null;
   let depth = 0;
   let inString = false;

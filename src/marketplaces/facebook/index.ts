@@ -27,7 +27,8 @@ import {
   searchVariables,
 } from './queries.js';
 import { GraphAnswer, chooseAnswer, needsSearchPage } from './route.js';
-import { fetchGraphQL, fetchSearchPage, isRefusal } from './transport.js';
+import { RefusalError, fetchGraphQL, fetchSearchPage } from './transport.js';
+import { SearchData } from './wire.js';
 
 export { DEFAULT_RADIUS_MILES } from './queries.js';
 
@@ -136,8 +137,8 @@ export class FacebookMarketplace extends BaseMarketplace {
         return null;
       }
       return parseListings(edges, limit, showSold);
-    } catch (err: any) {
-      console.error('[facebook] search page fallback failed:', err?.message ?? err);
+    } catch (err) {
+      console.error('[facebook] search page fallback failed:', err instanceof Error ? err.message : err);
       return null;
     }
   }
@@ -152,14 +153,17 @@ async function searchGraphQL(
   showSold: boolean
 ): Promise<GraphAnswer> {
   try {
-    const response = await fetchGraphQL(SEARCH_DOC_ID, searchVariables(query, coords, limit, prices, radiusMiles));
+    const response = await fetchGraphQL<SearchData>(
+      SEARCH_DOC_ID,
+      searchVariables(query, coords, limit, prices, radiusMiles)
+    );
     return {
       kind: 'read',
       reading: readFeedUnits(response.data?.marketplace_search?.feed_units, limit, showSold),
     };
   } catch (error) {
-    if (!isRefusal(error)) throw error;
-    console.error('[facebook] graphql search refused:', (error as Error).message);
+    if (!(error instanceof RefusalError)) throw error;
+    console.error('[facebook] graphql search refused:', error.message);
     return { kind: 'failed', error };
   }
 }

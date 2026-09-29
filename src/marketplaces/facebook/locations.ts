@@ -2,6 +2,7 @@ import { lookupUsCity, stateNameForCode } from '../us-cities.js';
 import { LocationCoordinates } from '../../types.js';
 import { LOCATION_DOC_ID, locationVariables } from './queries.js';
 import { fetchGraphQL } from './transport.js';
+import { Coordinates, LocationSearchData, PlaceNode } from './wire.js';
 
 const CITY_PAGE_CACHE_MAX = 200;
 const CITY_PAGE_MAX_MILES = 50;
@@ -64,6 +65,7 @@ export class LocationResolver {
       // South Africa and "sacramento" with a street in Portugal. Only real
       // places carry the bare "City" subtitle.
       const node = places.find(isCity) ?? places[0];
+      if (!node.location) return null;
       const name = isCity(node)
         ? node.single_line_address
         : subtitleKind(node) || node.single_line_address;
@@ -71,7 +73,7 @@ export class LocationResolver {
       const coords: LocationCoordinates = {
         latitude: node.location.latitude,
         longitude: node.location.longitude,
-        name,
+        name: name ?? '',
       };
 
       this.coordsCache.set(cacheKey, coords);
@@ -88,22 +90,25 @@ export class LocationResolver {
 async function nearbyCityPageId(query: string, near: LocationCoordinates): Promise<string | null> {
   try {
     const nearby = (await placesMatching(query))
-      .filter((node) => node.page?.id && node.location)
-      .map((node) => ({ node, miles: milesBetween(near, node.location) }))
+      .flatMap((node) => {
+        const pageId = node.page?.id;
+        return pageId && node.location
+          ? [{ node, pageId, miles: milesBetween(near, node.location) }]
+          : [];
+      })
       .filter(({ miles }) => miles <= CITY_PAGE_MAX_MILES)
-      .sort((a, b) => a.miles - b.miles)
-      .map(({ node }) => node);
-    const city = nearby.find(isCity) ?? nearby[0];
-    return city?.page.id ?? null;
+      .sort((a, b) => a.miles - b.miles);
+    const city = nearby.find(({ node }) => isCity(node)) ?? nearby[0];
+    return city?.pageId ?? null;
   } catch {
     return null;
   }
 }
 
-async function placesMatching(query: string): Promise<any[]> {
-  const response = await fetchGraphQL(LOCATION_DOC_ID, locationVariables(query));
-  const edges: any[] = response?.data?.city_street_search?.street_results?.edges ?? [];
-  return edges.map((edge) => edge?.node).filter(Boolean);
+async function placesMatching(query: string): Promise<PlaceNode[]> {
+  const response = await fetchGraphQL<LocationSearchData>(LOCATION_DOC_ID, locationVariables(query));
+  const edges = response.data?.city_street_search?.street_results?.edges ?? [];
+  return edges.flatMap((edge) => (edge?.node ? [edge.node] : []));
 }
 
 /**
@@ -121,15 +126,15 @@ function candidates(query: string): string[] {
   return [...new Set([preferred, city].filter(Boolean))];
 }
 
-function subtitleKind(node: any): string | undefined {
-  return node?.subtitle?.split(' ·')[0];
+function subtitleKind(node: PlaceNode): string | undefined {
+  return node.subtitle?.split(' ·')[0];
 }
 
-function isCity(node: any): boolean {
+function isCity(node: PlaceNode): boolean {
   return subtitleKind(node) === 'City';
 }
 
-function milesBetween(a: LocationCoordinates, b: { latitude: number; longitude: number }): number {
+function milesBetween(a: Coordinates, b: Coordinates): number {
   const toRad = (deg: number) => (deg * Math.PI) / 180;
   const dLat = toRad(b.latitude - a.latitude);
   const dLon = toRad(b.longitude - a.longitude);
