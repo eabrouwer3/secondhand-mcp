@@ -70,7 +70,7 @@ export class FacebookMarketplace extends BaseMarketplace {
 
       let result: SearchResult | null = null;
       if (isGatedVersion(graph, limit)) {
-        const page = await this.searchViaPage(location, query, limit, prices, showSold, radiusMiles);
+        const page = await this.searchViaPage(location, coords, query, limit, prices, showSold, radiusMiles);
         if (page && page.listings.length > graph.listings.length) {
           result = page;
         } else if (!page && graph.malformed && graph.listings.length === 0) {
@@ -125,6 +125,7 @@ export class FacebookMarketplace extends BaseMarketplace {
 
   private async searchViaPage(
     location: string,
+    coords: LocationCoordinates,
     query: string,
     limit: number,
     prices: PriceBounds,
@@ -132,7 +133,7 @@ export class FacebookMarketplace extends BaseMarketplace {
     radiusMiles: number
   ): Promise<SearchResult | null> {
     try {
-      const pageId = await this.locations.cityPageId(location);
+      const pageId = await this.locations.cityPageId(location, coords);
       if (!pageId) return null;
       const html = await fetchSearchPage(searchPageUrl(pageId, query, prices, radiusMiles));
       const edges = extractFeedUnitEdges(html);

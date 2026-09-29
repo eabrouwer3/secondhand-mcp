@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FacebookMarketplace } from '../src/marketplaces/facebook/index.js';
 
-// facebook.ts builds a ProxyAgent from SMARTPROXY_URL at module evaluation.
+// The Facebook transport builds a ProxyAgent from SMARTPROXY_URL at module evaluation.
 vi.mock('undici', () => ({ ProxyAgent: class {} }));
 
 const GRAPHQL_URL = 'https://www.facebook.com/api/graphql/';

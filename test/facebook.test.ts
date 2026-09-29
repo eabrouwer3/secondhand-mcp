@@ -391,8 +391,8 @@ describe('gated API version and the search page fallback', () => {
       city_street_search: {
         street_results: {
           edges: [
-            { node: { subtitle: 'Venue · Somewhere', page: { id: 'venue' } } },
-            { node: { subtitle: 'City · California', page: { id: CITY_PAGE_ID } } },
+            { node: { subtitle: 'Venue · Somewhere', page: { id: 'venue' }, location: { latitude: 37.78, longitude: -122.41 } } },
+            { node: { subtitle: 'City · California', page: { id: CITY_PAGE_ID }, location: { latitude: 37.77, longitude: -122.42 } } },
           ],
         },
       },
@@ -477,6 +477,60 @@ describe('gated API version and the search page fallback', () => {
     const result = await search();
 
     expect(result.listings.map((l) => l.id)).toEqual(['only']);
+  });
+
+  describe('city page for a place name shared across states', () => {
+    const cityPage = (id: string, state: string, latitude: number, longitude: number) => ({
+      node: { subtitle: `City · ${state}`, page: { id }, location: { latitude, longitude } },
+    });
+    const montclairCA = cityPage('montclair-ca', 'California', 34.08, -117.69);
+    const montclairNJ = cityPage('montclair-nj', 'New Jersey', 40.83, -74.21);
+
+    it('asks Facebook with the state spelled out and searches that state', async () => {
+      const { calls } = stubFetch((req) => {
+        if (req.url.includes('/marketplace/')) return html(pageHtml(['nj1']));
+        if (req.docId === LOCATION_DOC_ID) {
+          return json(locationBody(req.variables.params.query === 'montclair, new jersey' ? [montclairNJ] : [montclairCA]));
+        }
+        return json(gatedSearchBody([], true));
+      });
+
+      const result = await search({ location: 'Montclair, NJ' });
+
+      expect(calls.filter((c) => c.docId === LOCATION_DOC_ID)[0].variables.params.query).toBe('montclair, new jersey');
+      expect(calls.find((c) => c.url.includes('/marketplace/'))!.url).toContain('/marketplace/montclair-nj/search?');
+      expect(result.listings.map((l) => l.id)).toEqual(['nj1']);
+    });
+
+    it('never searches a same-named town in another state', async () => {
+      const { calls } = stubFetch((req) => {
+        if (req.url.includes('/marketplace/')) return html(pageHtml(['ca1']));
+        if (req.docId === LOCATION_DOC_ID) return json(locationBody([montclairCA]));
+        return json(gatedSearchBody([item({ id: 'g1' })], true));
+      });
+
+      const result = await search({ location: 'Montclair, NJ' });
+
+      expect(calls.some((c) => c.url.includes('/marketplace/'))).toBe(false);
+      expect(result.listings.map((l) => l.id)).toEqual(['g1']);
+    });
+
+    it('prefers the nearest page when several are close enough', async () => {
+      const { calls } = stubFetch((req) => {
+        if (req.url.includes('/marketplace/')) return html(pageHtml(['p1']));
+        if (req.docId === LOCATION_DOC_ID) {
+          return json(locationBody([
+            cityPage('oakland', 'California', 37.8, -122.27),
+            cityPage('san-francisco', 'California', 37.77, -122.42),
+          ]));
+        }
+        return json(gatedSearchBody([], true));
+      });
+
+      await search();
+
+      expect(calls.find((c) => c.url.includes('/marketplace/'))!.url).toContain('/marketplace/san-francisco/search?');
+    });
   });
 
   it('carries the radius onto the search page url', async () => {

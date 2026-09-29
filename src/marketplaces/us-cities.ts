@@ -32,6 +32,15 @@ const STATE_CODES: Record<string, string> = {
   wyoming: 'WY', 'district of columbia': 'DC',
 };
 
+const STATE_NAMES: Record<string, string> = Object.fromEntries(
+  Object.entries(STATE_CODES).map(([name, code]) => [code, name])
+);
+
+/** "nj" → "new jersey"; undefined for anything that is not a state code. */
+export function stateNameForCode(code: string): string | undefined {
+  return STATE_NAMES[code.trim().toUpperCase()];
+}
+
 /**
  * Shorthand people type that is not a place name in any dataset. Values are
  * GeoNames names, so they resolve through the same index as anything else.

@@ -1,9 +1,11 @@
-import { lookupUsCity } from '../us-cities.js';
+import { lookupUsCity, stateNameForCode } from '../us-cities.js';
 import { LocationCoordinates } from '../../types.js';
 import { LOCATION_DOC_ID, locationVariables } from './queries.js';
 import { fetchGraphQL } from './transport.js';
 
 const CITY_PAGE_CACHE_MAX = 200;
+const CITY_PAGE_MAX_MILES = 50;
+const EARTH_RADIUS_MILES = 3958.8;
 
 export class LocationResolver {
   private coordsCache: Map<string, LocationCoordinates> = new Map();
@@ -25,13 +27,14 @@ export class LocationResolver {
     return null;
   }
 
-  async cityPageId(location: string): Promise<string | null> {
+  /** The Marketplace city page for a location, only ever one near `near`. */
+  async cityPageId(location: string, near: LocationCoordinates): Promise<string | null> {
     const key = location.toLowerCase().trim();
     if (this.cityPageIdCache.has(key)) return this.cityPageIdCache.get(key)!;
 
     let pageId: string | null = null;
     for (const candidate of candidates(location)) {
-      pageId = await lookupCityPageId(candidate);
+      pageId = await nearbyCityPageId(candidate, near);
       if (pageId) break;
     }
 
@@ -49,18 +52,13 @@ export class LocationResolver {
     }
 
     try {
-      const response = await fetchGraphQL(LOCATION_DOC_ID, locationVariables(cacheKey));
-
-      const edges = response?.data?.city_street_search?.street_results?.edges;
-      if (!edges || edges.length === 0) {
-        return null;
-      }
+      const places = await placesMatching(cacheKey);
+      if (places.length === 0) return null;
 
       // Results are ranked by check-ins, so "phoenix" leads with a venue in
       // South Africa and "sacramento" with a street in Portugal. Only real
       // places carry the bare "City" subtitle.
-      const cityEdge = edges.find((e: any) => isCity(e.node));
-      const node = (cityEdge ?? edges[0]).node;
+      const node = places.find(isCity) ?? places[0];
       const name = isCity(node)
         ? node.single_line_address
         : subtitleKind(node) || node.single_line_address;
@@ -79,34 +77,43 @@ export class LocationResolver {
   }
 }
 
-async function lookupCityPageId(query: string): Promise<string | null> {
+// Place names repeat across states, so "montclair" alone ranks Montclair,
+// California above Montclair, New Jersey. A page far from the coordinates we
+// already resolved is a different town, and searching it serves its listings.
+async function nearbyCityPageId(query: string, near: LocationCoordinates): Promise<string | null> {
   try {
-    const response = await fetchGraphQL(LOCATION_DOC_ID, locationVariables(query));
-    const edges = response?.data?.city_street_search?.street_results?.edges ?? [];
-    const places = edges.map((e: any) => e?.node).filter((n: any) => n?.page?.id);
-    const city = places.find(isCity) ?? places[0];
-    return city?.page?.id ?? null;
+    const nearby = (await placesMatching(query))
+      .filter((node) => node.page?.id && node.location)
+      .map((node) => ({ node, miles: milesBetween(near, node.location) }))
+      .filter(({ miles }) => miles <= CITY_PAGE_MAX_MILES)
+      .sort((a, b) => a.miles - b.miles)
+      .map(({ node }) => node);
+    const city = nearby.find(isCity) ?? nearby[0];
+    return city?.page.id ?? null;
   } catch {
     return null;
   }
 }
 
+async function placesMatching(query: string): Promise<any[]> {
+  const response = await fetchGraphQL(LOCATION_DOC_ID, locationVariables(query));
+  const edges: any[] = response?.data?.city_street_search?.street_results?.edges ?? [];
+  return edges.map((edge) => edge?.node).filter(Boolean);
+}
+
 /**
  * Facebook's city search is literal, and a "City, ST" query does not just
  * miss — "kansas city, mo" returns Mound City, Kansas. Spelling the state
- * out is the only form that reliably lands, so it goes first; the bare
- * city name is a last resort because "austin" is Austin, Illinois.
+ * out is the only form that reliably lands, so it replaces the code; the
+ * bare city name is a last resort because "austin" is Austin, Illinois.
  */
 function candidates(query: string): string[] {
-  const base = query.toLowerCase().trim();
-  const out: string[] = [];
-
-  if (!out.includes(base)) out.push(base);
-
-  const bareCity = base.split(',')[0].trim();
-  if (bareCity && !out.includes(bareCity)) out.push(bareCity);
-
-  return out;
+  const typed = query.toLowerCase().trim();
+  const parts = typed.split(',').map((part) => part.trim());
+  const city = parts[0];
+  const state = parts.length > 1 ? stateNameForCode(parts[parts.length - 1]) : undefined;
+  const preferred = state ? `${city}, ${state}` : typed;
+  return [...new Set([preferred, city].filter(Boolean))];
 }
 
 function subtitleKind(node: any): string | undefined {
@@ -115,4 +122,14 @@ function subtitleKind(node: any): string | undefined {
 
 function isCity(node: any): boolean {
   return subtitleKind(node) === 'City';
+}
+
+function milesBetween(a: LocationCoordinates, b: { latitude: number; longitude: number }): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLon = toRad(b.longitude - a.longitude);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.latitude)) * Math.cos(toRad(b.latitude)) * Math.sin(dLon / 2) ** 2;
+  return EARTH_RADIUS_MILES * 2 * Math.asin(Math.sqrt(h));
 }
