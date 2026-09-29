@@ -3,13 +3,14 @@ import { DETAIL_INFO_DOC_ID, DETAIL_PHOTOS_DOC_ID, detailInfoVariables, detailPh
 import { fetchGraphQL } from './transport.js';
 
 export async function getListingDetails(listingId: string): Promise<ListingDetails> {
-  const [photosRes, infoRes] = await Promise.all([
+  const [photos, info] = await Promise.allSettled([
     fetchGraphQL(DETAIL_PHOTOS_DOC_ID, detailPhotosVariables(listingId)),
     fetchGraphQL(DETAIL_INFO_DOC_ID, detailInfoVariables(listingId)),
   ]);
+  if (photos.status === 'rejected' && info.status === 'rejected') throw photos.reason;
 
-  const photosTarget = photosRes?.data?.viewer?.marketplace_product_details_page?.target;
-  const infoTarget = infoRes?.data?.viewer?.marketplace_product_details_page?.target;
+  const photosTarget = detailsTarget(photos, 'photos');
+  const infoTarget = detailsTarget(info, 'info');
 
   return {
     id: listingId,
@@ -22,6 +23,15 @@ export async function getListingDetails(listingId: string): Promise<ListingDetai
     isShippingOffered: infoTarget?.is_shipping_offered ?? undefined,
     url: `https://www.facebook.com/marketplace/item/${listingId}`,
   };
+}
+
+/** One request's share of the listing; a failed one leaves its fields empty. */
+function detailsTarget(settled: PromiseSettledResult<any>, part: string): any {
+  if (settled.status === 'rejected') {
+    console.error(`[facebook] listing ${part} request failed:`, settled.reason?.message ?? settled.reason);
+    return undefined;
+  }
+  return settled.value?.data?.viewer?.marketplace_product_details_page?.target;
 }
 
 function photoUris(photosTarget: any): string[] {

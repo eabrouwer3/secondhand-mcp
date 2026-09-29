@@ -230,35 +230,50 @@ describe('detail parsing', () => {
 });
 
 describe('detail failures', () => {
-  it('fails when the photos call fails', async () => {
+  it('keeps the description and seller when the photos call fails', async () => {
     stubFetch(({ docId }) =>
       docId === PHOTOS_DOC_ID
         ? new Response(null, { status: 404 })
         : json(detailsBody(infoTarget()))
     );
 
-    await expect(getDetails()).rejects.toThrow('404');
+    const details = await getDetails();
+
+    expect(details.images).toEqual([]);
+    expect(details.description).toBe('Barely ridden, garage kept.');
+    expect(details.seller).toBe('Ada L.');
   });
 
-  it('fails when the info call fails', async () => {
+  it('keeps the photos when the info call fails', async () => {
     stubFetch(({ docId }) =>
       docId === INFO_DOC_ID
         ? new Response(null, { status: 403 })
-        : json(detailsBody(photosTarget([])))
+        : json(detailsBody(photosTarget([photo('https://cdn/a.jpg')])))
     );
 
-    await expect(getDetails()).rejects.toThrow('403');
+    const details = await getDetails();
+
+    expect(details.images).toEqual(['https://cdn/a.jpg']);
+    expect(details.description).toBeUndefined();
   });
 
-  it('surfaces a GraphQL error body from either call', async () => {
+  it('fails with the photos error when both calls fail', async () => {
+    stubFetch(({ docId }) =>
+      docId === PHOTOS_DOC_ID
+        ? new Response(null, { status: 404 })
+        : json({ errors: [{ message: 'Please try again later' }] })
+    );
+
+    await expect(getDetails()).rejects.toThrow('404');
+  });
+
+  it('reads the data that arrives alongside a partial GraphQL error', async () => {
     stubFetch(({ docId }) =>
       docId === INFO_DOC_ID
-        ? json({ errors: [{ message: 'Please try again later' }] })
+        ? json({ ...detailsBody(infoTarget()), errors: [{ message: 'field failed' }] })
         : json(detailsBody(photosTarget([])))
     );
 
-    await expect(getDetails()).rejects.toThrow(
-      'Facebook GraphQL error: Please try again later'
-    );
+    await expect(getDetails()).resolves.toMatchObject({ description: 'Barely ridden, garage kept.' });
   });
 });
