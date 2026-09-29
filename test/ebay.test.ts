@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { EbayMarketplace, resizeEbayImageUrl } from '../src/marketplaces/ebay.js';
+import { EbayMarketplace, resizeEbayImageUrl } from '../src/marketplaces/ebay/index.js';
 
 const TOKEN_URL = 'https://api.ebay.com/identity/v1/oauth2/token';
 const SEARCH_PATH = '/buy/browse/v1/item_summary/search';
