@@ -334,6 +334,15 @@ describe('search_marketplace arguments', () => {
     expect(text).toContain('📷 1 photo');
   });
 
+  it.each([
+    ['limit', -5],
+    ['offset', 2.5],
+  ])('rejects a %s that is not a whole number', async (name, value) => {
+    const res = await call('search_marketplace', { query: 'chair', [name]: value });
+    expect(res.isError).toBe(true);
+    expect(textOf(res)).toBe(`${name} must be a whole number, 0 or more`);
+  });
+
   it('rejects an argument of the wrong type instead of searching with it', async () => {
     const res = await call('search_marketplace', { query: 'chair', maxPrice: 'fifty' });
     expect(res.isError).toBe(true);

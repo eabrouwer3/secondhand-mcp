@@ -1,6 +1,6 @@
 import { getAllMarketplaces, getMarketplace, listMarketplaceNames } from '../marketplaces/index.js';
 import { SearchParams, SearchResult } from '../types.js';
-import { booleanArg, numberArg, stringArg, stringListArg } from './arguments.js';
+import { booleanArg, countArg, numberArg, stringArg, stringListArg } from './arguments.js';
 import { formatMultipleResults, formatSingleResult } from './format.js';
 import { ToolResult, errorResult, textResult } from './results.js';
 
@@ -58,8 +58,8 @@ function readArgs(args: unknown): SearchMarketplaceArgs {
     radiusMiles: numberArg(args, 'radiusMiles'),
     maxPrice: numberArg(args, 'maxPrice'),
     minPrice: numberArg(args, 'minPrice'),
-    limit: numberArg(args, 'limit'),
-    offset: numberArg(args, 'offset'),
+    limit: countArg(args, 'limit'),
+    offset: countArg(args, 'offset'),
     showSold: booleanArg(args, 'showSold'),
     includeImages: booleanArg(args, 'includeImages'),
     sort: stringArg(args, 'sort'),
