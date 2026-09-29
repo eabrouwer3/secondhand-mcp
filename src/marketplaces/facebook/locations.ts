@@ -18,7 +18,7 @@ export class LocationResolver {
 
     const primaryKey = query.toLowerCase().trim();
 
-    for (const candidate of candidates(query)) {
+    for (const candidate of lookupCandidates(query)) {
       const coords = await this.coordinatesExact(candidate);
       if (coords) {
         if (candidate !== primaryKey) this.coordsCache.set(primaryKey, coords);
@@ -34,7 +34,7 @@ export class LocationResolver {
     const cached = this.cityPageIdCache.get(key);
     if (cached) return cached;
 
-    for (const candidate of candidates(location)) {
+    for (const candidate of lookupCandidates(location)) {
       const pageId = await nearbyCityPageId(candidate, near);
       if (pageId) {
         this.rememberCityPage(key, pageId);
@@ -117,7 +117,7 @@ async function placesMatching(query: string): Promise<PlaceNode[]> {
  * out is the only form that reliably lands, so it replaces the code; the
  * bare city name is a last resort because "austin" is Austin, Illinois.
  */
-function candidates(query: string): string[] {
+export function lookupCandidates(query: string): string[] {
   const typed = query.toLowerCase().trim();
   const parts = typed.split(',').map((part) => part.trim());
   const city = parts[0];
