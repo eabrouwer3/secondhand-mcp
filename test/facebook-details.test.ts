@@ -216,20 +216,40 @@ describe('detail parsing', () => {
     ['no details page', { data: { viewer: {} } }],
     ['no viewer', { data: {} }],
     ['no data', {}],
-  ])('still returns an identified listing when the response has %s', async (_label, body) => {
+  ])('fails rather than answer with an empty listing when the response has %s', async (_label, body) => {
     stubFetch(() => json(body));
 
-    const details = await getDetails('123');
-
-    expect(details).toEqual({
-      id: '123',
-      images: [],
-      url: 'https://www.facebook.com/marketplace/item/123',
-    });
+    await expect(getDetails('123')).rejects.toThrow('Facebook returned no listing 123');
   });
 });
 
 describe('detail failures', () => {
+  it('fails for a listing Facebook no longer returns', async () => {
+    stubFetch(() => json({ ...detailsBody(null), errors: [{ message: 'not found' }] }));
+
+    await expect(getDetails()).rejects.toThrow('Facebook returned no listing 9182736');
+  });
+
+  it('marks the photos unavailable when only the photos call fails', async () => {
+    stubFetch(({ docId }) =>
+      docId === PHOTOS_DOC_ID ? new Response(null, { status: 404 }) : json(detailsBody(infoTarget()))
+    );
+
+    await expect(getDetails()).resolves.toMatchObject({ unavailable: ['photos'] });
+  });
+
+  it('marks the description unavailable when the info call returns no listing', async () => {
+    stubDetails(photosTarget([photo('https://cdn/a.jpg')]), null);
+
+    await expect(getDetails()).resolves.toMatchObject({ images: ['https://cdn/a.jpg'], unavailable: ['description'] });
+  });
+
+  it('marks nothing unavailable when both parts arrive', async () => {
+    stubDetails(photosTarget([]), infoTarget());
+
+    expect((await getDetails()).unavailable).toBeUndefined();
+  });
+
   it('keeps the description and seller when the photos call fails', async () => {
     stubFetch(({ docId }) =>
       docId === PHOTOS_DOC_ID

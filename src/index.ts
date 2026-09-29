@@ -18,7 +18,7 @@ import {
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 
-import { SearchParams, SearchResult, Listing, ListingDetails } from './types.js';
+import { SearchParams, SearchResult, Listing, ListingDetails, ListingPart } from './types.js';
 import {
   initializeMarketplaces,
   getMarketplace,
@@ -635,6 +635,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 images: details.images,
                 deliveryTypes: details.deliveryTypes,
                 isShippingOffered: details.isShippingOffered,
+                unavailable: details.unavailable,
               },
             })
           }]
@@ -735,6 +736,11 @@ function formatMultipleResults(results: SearchResult[], params: SearchParams, in
   return lines.join('\n');
 }
 
+const UNAVAILABLE_NOTES: Record<ListingPart, string> = {
+  photos: "Photos couldn't be loaded right now; asking again may bring them back.",
+  description: "The description, location and seller couldn't be loaded right now; asking again may bring them back.",
+};
+
 function formatListingDetails(details: ListingDetails): string {
   const lines = [
     `📋 Listing Details`,
@@ -761,6 +767,10 @@ function formatListingDetails(details: ListingDetails): string {
 
   if (details.isShippingOffered) {
     lines.push(`📦 Shipping available`);
+  }
+
+  for (const part of details.unavailable ?? []) {
+    lines.push(`⚠️ ${UNAVAILABLE_NOTES[part]}`);
   }
 
   if (details.images.length > 0) {

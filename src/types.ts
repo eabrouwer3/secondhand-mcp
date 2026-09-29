@@ -45,6 +45,9 @@ export interface SearchResult {
   note?: string;
 }
 
+/** A part of a listing that a marketplace failed to return this time. */
+export type ListingPart = 'photos' | 'description';
+
 export interface ListingDetails {
   id: string;
   description?: string;
@@ -55,6 +58,7 @@ export interface ListingDetails {
   deliveryTypes?: string[];
   isShippingOffered?: boolean;
   url: string;
+  unavailable?: ListingPart[];
 }
 
 export interface MarketplaceConfig {

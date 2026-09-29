@@ -1,4 +1,4 @@
-import { ListingDetails } from '../../types.js';
+import { ListingDetails, ListingPart } from '../../types.js';
 import { DETAIL_INFO_DOC_ID, DETAIL_PHOTOS_DOC_ID, detailInfoVariables, detailPhotosVariables } from './queries.js';
 import { fetchGraphQL } from './transport.js';
 import { DetailData, DetailTarget, GraphQLResponse } from './wire.js';
@@ -8,10 +8,14 @@ export async function getListingDetails(listingId: string): Promise<ListingDetai
     fetchGraphQL<DetailData>(DETAIL_PHOTOS_DOC_ID, detailPhotosVariables(listingId)),
     fetchGraphQL<DetailData>(DETAIL_INFO_DOC_ID, detailInfoVariables(listingId)),
   ]);
-  if (photos.status === 'rejected' && info.status === 'rejected') throw photos.reason;
 
   const photosTarget = detailsTarget(photos, 'photos');
   const infoTarget = detailsTarget(info, 'info');
+  if (!photosTarget && !infoTarget) throw noListing(listingId, photos, info);
+
+  const unavailable: ListingPart[] = [];
+  if (!photosTarget) unavailable.push('photos');
+  if (!infoTarget) unavailable.push('description');
 
   return {
     id: listingId,
@@ -23,7 +27,14 @@ export async function getListingDetails(listingId: string): Promise<ListingDetai
     deliveryTypes: infoTarget?.delivery_types ?? undefined,
     isShippingOffered: infoTarget?.is_shipping_offered ?? undefined,
     url: `https://www.facebook.com/marketplace/item/${listingId}`,
+    unavailable: unavailable.length > 0 ? unavailable : undefined,
   };
+}
+
+function noListing(listingId: string, ...parts: PromiseSettledResult<unknown>[]): unknown {
+  const failed = parts.find((part) => part.status === 'rejected');
+  if (failed?.status === 'rejected') return failed.reason;
+  return new Error(`Facebook returned no listing ${listingId}; it may have been removed`);
 }
 
 /** One request's share of the listing; a failed one leaves its fields empty. */

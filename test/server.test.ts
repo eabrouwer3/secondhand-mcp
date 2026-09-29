@@ -454,6 +454,13 @@ describe('get_listing_details', () => {
     expect(res.isError).toBe(true);
   });
 
+  it('says which parts of a listing could not be loaded', async () => {
+    h.impl.facebook = { details: () => details({ unavailable: ['photos', 'description'] }) };
+    const text = textOf(await call('get_listing_details', { listingId: '1' }));
+    expect(text).toContain("Photos couldn't be loaded right now");
+    expect(text).toContain("The description, location and seller couldn't be loaded right now");
+  });
+
   it('renders the listing body without image fetching by default', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
@@ -717,6 +724,12 @@ describe('fetch (deep research)', () => {
     const res = await call('fetch', { id: 'craigslist:1' });
     expect(res.isError).toBe(true);
     expect(textOf(res)).toContain('listing details unsupported: craigslist');
+  });
+
+  it('carries the parts that could not be loaded into the metadata', async () => {
+    h.impl.facebook = { details: () => details({ url: 'https://fb/99', unavailable: ['photos'] }) };
+    const body = jsonOf(await call('fetch', { id: 'facebook:99' }));
+    expect(body.metadata.unavailable).toEqual(['photos']);
   });
 
   it('returns the deep-research document shape', async () => {
