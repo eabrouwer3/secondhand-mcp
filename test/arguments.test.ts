@@ -77,13 +77,15 @@ describe('stringListArg', () => {
   it.each([
     [['S', 'M'], ['S', 'M']],
     ['M', ['M']],
+    [[9, 10.5], ['9', '10.5']],
+    [9, ['9']],
     [[], undefined],
     [undefined, undefined],
   ])('reads %j as %j', (value, expected) => {
     expect(stringListArg({ sizes: value }, 'sizes')).toEqual(expected);
   });
 
-  it.each([[[1, 2]], [{}]])('rejects %j', (value) => {
+  it.each([[[true]], [{}], [[{}]]])('rejects %j', (value) => {
     expect(() => stringListArg({ sizes: value }, 'sizes')).toThrow('sizes must be a list of strings');
   });
 });

@@ -56,7 +56,9 @@ export function booleanArg(args: Args, name: string): boolean | undefined {
 export function stringListArg(args: Args, name: string): string[] | undefined {
   const value = raw(args, name);
   if (value === undefined) return undefined;
-  const list = Array.isArray(value) ? value : [value];
+  const list = (Array.isArray(value) ? value : [value]).map((item) =>
+    typeof item === 'number' ? String(item) : item
+  );
   if (!list.every((item): item is string => typeof item === 'string')) {
     throw new ArgumentError(`${name} must be a list of strings`);
   }
