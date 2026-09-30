@@ -112,7 +112,7 @@ async function inlineReply(details: ListingDetails, photos: PhotoSelection): Pro
   if (okImages.length === 0) {
     return textResult(
       withoutPhotos(details) +
-        '\n\n⚠️ Server-side image fetch failed for all photos (the CDN likely blocks datacenter requests).' +
+        "\n\n⚠️ Server-side image fetch failed for all photos, so they're listed as links to open directly." +
         photoUrlsText(photos)
     );
   }
