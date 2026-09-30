@@ -91,6 +91,12 @@ describe('descriptionText', () => {
     expect(text.length).toBeLessThan(100_000);
   });
 
+  it('reads to the end of a description whose tags are never closed', () => {
+    const html = Array.from({ length: 130 }, (_, i) => `<font>Line ${i + 1}<br>`).join('');
+    const text = descriptionText(html);
+    expect(text.endsWith('Line 129\nLine 130')).toBe(true);
+  });
+
   it('drops an unclosed comment, script or declaration to the end, as a browser does', () => {
     expect(descriptionText('<p>Oak table</p><!-- seller note')).toBe('Oak table');
     expect(descriptionText('<p>Oak table</p><script>track(')).toBe('Oak table');

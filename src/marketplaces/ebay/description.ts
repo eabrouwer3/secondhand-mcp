@@ -5,6 +5,11 @@ const MARKUP = /<[a-z!\/]/i;
 // slows sharply on long unclosed nesting. Cutting here rather than through the
 // library's own limit keeps it from logging a warning on every long description.
 const MAX_DESCRIPTION_CHARS = 100_000;
+// Every tag a seller leaves unclosed nests the rest of the description one
+// level deeper, so old templates run to hundreds of levels. The walk exhausts
+// Node's default stack at roughly 3,000 to 4,000 levels (measured with these
+// formatters); stopping well short keeps the text instead of the raw fallback.
+const MAX_NESTING_DEPTH = 1_000;
 
 function insideListItem(elem: Parameters<FormatCallback>[0]): boolean {
   for (let parent = elem.parent; parent; parent = parent.parent) {
@@ -40,9 +45,7 @@ const WHITESPACE = ' \t\r\n\f\u200b\u00a0';
 
 const HTML: HtmlToTextOptions = {
   wordwrap: false,
-  // Nesting deeper than this is not a description; deeper still, the walk
-  // would exhaust the stack on a malformed one.
-  limits: { maxDepth: 100 },
+  limits: { maxDepth: MAX_NESTING_DEPTH },
   whitespaceCharacters: WHITESPACE,
   formatters: { paragraphUnlessInline, cellThenSpace },
   selectors: [
