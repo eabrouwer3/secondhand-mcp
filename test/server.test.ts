@@ -343,6 +343,19 @@ describe('search_marketplace arguments', () => {
     expect(textOf(res)).toBe(`${name} must be a whole number, 0 or more`);
   });
 
+  it('reads a condition written the way people say it', async () => {
+    h.impl.ebay = { search: () => ok('ebay', []) };
+    await call('search_marketplace', { query: 'lamp', marketplace: 'ebay', condition: 'Like New', sort: 'Newest' });
+    expect(h.searchCalls[0].params).toMatchObject({ condition: 'like_new', sort: 'newest' });
+  });
+
+  it('rejects a sort it does not know instead of returning unsorted results', async () => {
+    const res = await call('search_marketplace', { query: 'lamp', sort: 'price_asc' });
+    expect(res.isError).toBe(true);
+    expect(textOf(res)).toBe('sort must be one of: relevance, newest, most_popular, price_low_to_high, price_high_to_low');
+    expect(h.searchCalls).toEqual([]);
+  });
+
   it('rejects an argument of the wrong type instead of searching with it', async () => {
     const res = await call('search_marketplace', { query: 'chair', maxPrice: 'fifty' });
     expect(res.isError).toBe(true);

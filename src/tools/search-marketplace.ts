@@ -1,6 +1,6 @@
 import { getAllMarketplaces, getMarketplace, listMarketplaceNames } from '../marketplaces/index.js';
-import { SearchParams, SearchResult } from '../types.js';
-import { booleanArg, countArg, numberArg, stringArg, stringListArg } from './arguments.js';
+import { CONDITIONS, Condition, SORTS, SearchParams, SearchResult, Sort } from '../types.js';
+import { booleanArg, choiceArg, countArg, numberArg, stringArg, stringListArg } from './arguments.js';
 import { formatMultipleResults, formatSingleResult } from './format.js';
 import { ToolResult, errorResult, textResult } from './results.js';
 
@@ -15,8 +15,8 @@ interface SearchMarketplaceArgs {
   offset?: number;
   showSold?: boolean;
   includeImages?: boolean;
-  sort?: string;
-  condition?: string;
+  sort?: Sort;
+  condition?: Condition;
   category?: string;
   brand?: string;
   department?: string;
@@ -62,8 +62,8 @@ function readArgs(args: unknown): SearchMarketplaceArgs {
     offset: countArg(args, 'offset'),
     showSold: booleanArg(args, 'showSold'),
     includeImages: booleanArg(args, 'includeImages'),
-    sort: stringArg(args, 'sort'),
-    condition: stringArg(args, 'condition'),
+    sort: choiceArg(args, 'sort', SORTS),
+    condition: choiceArg(args, 'condition', CONDITIONS),
     category: stringArg(args, 'category'),
     brand: stringArg(args, 'brand'),
     department: stringArg(args, 'department'),
@@ -82,8 +82,8 @@ function toSearchParams(params: SearchMarketplaceArgs & { query: string }): Sear
     limit: params.limit || 20,
     offset: params.offset || 0,
     showSold: params.showSold || false,
-    sort: params.sort as SearchParams['sort'],
-    condition: params.condition as SearchParams['condition'],
+    sort: params.sort,
+    condition: params.condition,
     category: params.category,
     brand: params.brand,
     department: params.department,

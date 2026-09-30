@@ -98,6 +98,14 @@ describe('choiceArg', () => {
     expect(choiceArg({}, 'imageMode', MODES)).toBeUndefined();
   });
 
+  it.each(['Inline', ' INLINE '])('reads %j the way it is listed', (value) => {
+    expect(choiceArg({ imageMode: value }, 'imageMode', MODES)).toBe('inline');
+  });
+
+  it.each(['Like New', 'like-new', 'LIKE_NEW'])('reads %j as like_new', (value) => {
+    expect(choiceArg({ condition: value }, 'condition', ['new', 'like_new'] as const)).toBe('like_new');
+  });
+
   it('names the allowed values when one is not listed', () => {
     expect(() => choiceArg({ imageMode: 'base64' }, 'imageMode', MODES)).toThrow('imageMode must be one of: urls, inline');
   });

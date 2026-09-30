@@ -65,11 +65,12 @@ export function stringListArg(args: Args, name: string): string[] | undefined {
   return list.length > 0 ? list : undefined;
 }
 
+/** One of a fixed set of keywords, however it was cased or spaced ("Like New" is like_new). */
 export function choiceArg<T extends string>(args: Args, name: string, choices: readonly T[]): T | undefined {
   const value = stringArg(args, name);
   if (value === undefined) return undefined;
-  if (!(choices as readonly string[]).includes(value)) {
-    throw new ArgumentError(`${name} must be one of: ${choices.join(', ')}`);
-  }
-  return value as T;
+  const keyword = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const choice = choices.find((c) => c === keyword);
+  if (!choice) throw new ArgumentError(`${name} must be one of: ${choices.join(', ')}`);
+  return choice;
 }
