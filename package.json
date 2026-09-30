@@ -43,12 +43,14 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "~1.5.0",
     "all-the-cities": "^3.1.0",
+    "html-to-text": "^10.0.1",
     "puppeteer-core": "^24.37.1",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "undici": "^7.21.0"
   },
   "devDependencies": {
+    "@types/html-to-text": "^9.0.4",
     "@types/node": "^20.10.0",
     "@vitest/coverage-v8": "^4.1.11",
     "ts-node": "^10.9.0",

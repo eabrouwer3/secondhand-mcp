@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { EbayMarketplace, resizeEbayImageUrl } from '../src/marketplaces/ebay.js';
+import { EbayMarketplace, resizeEbayImageUrl } from '../src/marketplaces/ebay/index.js';
 
 describe('runner smoke', () => {
   it('resolves a TypeScript ESM import from src/', () => {

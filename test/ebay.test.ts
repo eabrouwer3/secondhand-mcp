@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { EbayMarketplace, resizeEbayImageUrl } from '../src/marketplaces/ebay.js';
+import { EbayMarketplace, resizeEbayImageUrl } from '../src/marketplaces/ebay/index.js';
 
 const TOKEN_URL = 'https://api.ebay.com/identity/v1/oauth2/token';
 const SEARCH_PATH = '/buy/browse/v1/item_summary/search';
@@ -609,7 +609,7 @@ describe('EbayMarketplace.getListingDetails', () => {
 
     expect(details).toEqual({
       id: 'v1|123456|0',
-      description: '<p>Full description</p>',
+      description: 'Full description',
       images: [
         'https://i.ebayimg.com/images/g/abc/s-l1600.jpg',
         'https://i.ebayimg.com/images/g/def/s-l1600.jpg',
@@ -620,6 +620,28 @@ describe('EbayMarketplace.getListingDetails', () => {
       isShippingOffered: true,
       url: 'https://www.ebay.de/itm/123456',
     });
+  });
+
+  it('reads the seller\'s HTML description as text', async () => {
+    install({
+      item: () =>
+        json({
+          itemId: 'v1|7|0',
+          description: '<div style="font-family:Arial"><h2>Specs</h2><table><tr><td><p>Make</p></td><td><p>Nintendo</p></td></tr></table><ul><li>Dock</li><li>Charger</li></ul></div>',
+        }),
+    });
+
+    const details = await market().getListingDetails('7');
+
+    expect(details.description).toBe('Specs\n\nMake Nintendo\n\n- Dock\n- Charger');
+  });
+
+  it('uses the short description when the HTML one holds no text', async () => {
+    install({
+      item: () => json({ itemId: 'v1|8|0', description: '<div><img src="a.jpg"><br></div>', shortDescription: 'Oak desk' }),
+    });
+
+    expect((await market().getListingDetails('8')).description).toBe('Oak desk');
   });
 
   it('falls back to shortDescription and reports no shipping', async () => {

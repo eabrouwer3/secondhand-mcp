@@ -18,17 +18,23 @@ export interface Listing {
   scrapedAt: string;
 }
 
+export const CONDITIONS = ['new', 'like_new', 'excellent', 'good', 'fair', 'used', 'any'] as const;
+export type Condition = (typeof CONDITIONS)[number];
+
+export const SORTS = ['relevance', 'newest', 'most_popular', 'price_low_to_high', 'price_high_to_low'] as const;
+export type Sort = (typeof SORTS)[number];
+
 export interface SearchParams {
   query: string;
   location?: string;
   maxPrice?: number;
   minPrice?: number;
   radius?: number; // in miles
-  condition?: 'new' | 'like_new' | 'excellent' | 'good' | 'fair' | 'used' | 'any';
+  condition?: Condition;
   limit?: number;
   offset?: number; // starting result offset for pagination (eBay)
   showSold?: boolean;
-  sort?: 'relevance' | 'newest' | 'price_low_to_high' | 'price_high_to_low' | 'most_popular';
+  sort?: Sort;
   category?: string;
   brand?: string;
   department?: string;

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FacebookMarketplace } from '../src/marketplaces/facebook/index.js';
-import { EbayMarketplace } from '../src/marketplaces/ebay.js';
+import { EbayMarketplace } from '../src/marketplaces/ebay/index.js';
 import { getBrowser } from '../src/browser.js';
 
 vi.mock('undici', () => ({

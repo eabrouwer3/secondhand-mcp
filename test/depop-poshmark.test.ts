@@ -560,6 +560,15 @@ describe('Poshmark listing details', () => {
     expect(details.images).toEqual(['https://cdn/og.jpg']);
   });
 
+  it('reads the seller from the closet href rather than the text around it', async () => {
+    const page = fakePage({
+      roots: [el('a[href^="/closet/"]', { href: '/closet/thriftqueen?tab=listings' }, 'thriftqueen Last Active: 2 hours ago Posher since 2019')],
+    });
+    use(page);
+    const details = await new PoshmarkMarketplace().getListingDetails('x');
+    expect(details.seller).toBe('thriftqueen');
+  });
+
   it('reads the seller from the closet href when the anchor has no text', async () => {
     const page = fakePage({ roots: [el('a[href^="/closet/"]', { href: '/closet/bargainbin' }, '  ')] });
     use(page);

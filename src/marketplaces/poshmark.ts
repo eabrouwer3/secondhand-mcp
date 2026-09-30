@@ -196,8 +196,11 @@ export class PoshmarkMarketplace extends BaseMarketplace {
             description = (document.querySelector('meta[name="description"]') as HTMLMetaElement | null)?.content || undefined;
           }
 
+          // The closet link's text also carries "Last Active…" and sales
+          // counts; its href is just the username.
           const sellerEl = document.querySelector('a[href^="/closet/"]');
-          if (sellerEl) seller = sellerEl.textContent?.trim() || sellerEl.getAttribute('href')?.replace('/closet/', '');
+          const closet = sellerEl?.getAttribute('href')?.slice('/closet/'.length).split(/[?#/]/)[0];
+          if (sellerEl) seller = closet || sellerEl.textContent?.trim() || undefined;
 
           return { description, images, seller };
         });
