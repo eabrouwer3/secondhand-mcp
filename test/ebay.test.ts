@@ -636,6 +636,14 @@ describe('EbayMarketplace.getListingDetails', () => {
     expect(details.description).toBe('Specs\n\nMake Nintendo\n\n- Dock\n- Charger');
   });
 
+  it('uses the short description when the HTML one holds no text', async () => {
+    install({
+      item: () => json({ itemId: 'v1|8|0', description: '<div><img src="a.jpg"><br></div>', shortDescription: 'Oak desk' }),
+    });
+
+    expect((await market().getListingDetails('8')).description).toBe('Oak desk');
+  });
+
   it('falls back to shortDescription and reports no shipping', async () => {
     install({
       item: () => json({ itemId: 'v1|1|0', shortDescription: 'short', itemWebUrl: 'https://x/1' }),

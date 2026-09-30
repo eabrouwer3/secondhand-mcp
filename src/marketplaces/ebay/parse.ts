@@ -50,8 +50,8 @@ export function itemDetails(item: Item, requestedId: string): ListingDetails {
 }
 
 function itemDescription(item: Item): string | undefined {
-  if (item.description) return descriptionText(item.description);
-  return item.shortDescription ?? undefined;
+  const text = item.description ? descriptionText(item.description) : '';
+  return text || item.shortDescription || undefined;
 }
 
 function placeText(location: BrowseLocation | undefined, parts: Array<keyof BrowseLocation>): string | undefined {
