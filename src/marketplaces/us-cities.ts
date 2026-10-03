@@ -136,10 +136,19 @@ function splitCityState(q: string): { city: string; state?: string } {
   return { city: q };
 }
 
+/**
+ * "Provo, UT 84601" without its ZIP. KSL filters by ZIP, so one location
+ * string can carry both; a bare ZIP is left alone since nothing would remain.
+ */
+export function withoutZip(query: string): string {
+  const stripped = query.replace(/[\s,]*\b\d{5}(?:-\d{4})?\s*$/, '');
+  return stripped.trim() ? stripped : query;
+}
+
 export function lookupUsCity(query: string): LocationCoordinates | null {
   if (!index) index = buildIndex();
 
-  const q = normalize(query);
+  const q = normalize(withoutZip(query));
   const { city, state } = splitCityState(q);
   const name = keyify(CITY_ALIASES[keyify(city)] ?? city);
 

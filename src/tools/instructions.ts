@@ -1,5 +1,5 @@
 /** Sent to the client at initialize, alongside the per-tool descriptions. */
-export const INSTRUCTIONS = `Secondhand MCP searches live listings on Facebook Marketplace, eBay, Depop and Poshmark.
+export const INSTRUCTIONS = `Secondhand MCP searches live listings on Facebook Marketplace, eBay, Depop, Poshmark and KSL Classifieds.
 
 Locations: Facebook Marketplace searches are local, so pass a US city and state as "City, ST" — for example "Austin, TX" or "Portland, OR". Do not pass a bare city name: there are 20 Springfields and several Portlands, and the wrong one returns listings from the wrong state. Before calling, translate whatever the user said into a city and state:
 - "near me" or "around here" — use the location they gave you earlier in the conversation; ask if you do not have one.
@@ -7,6 +7,8 @@ Locations: Facebook Marketplace searches are local, so pass a US city and state 
 - a ZIP code — use the city and state it belongs to.
 - a metro area ("the Bay Area", "DFW") — pick its principal city.
 - somewhere outside the US — pass the city and country as written; those resolve differently.
+
+KSL Classifieds is local to Utah and nearby states and filters by ZIP code, not city. To narrow a KSL search by distance, include a 5-digit ZIP in \`location\` (for example "Provo, UT 84601"); without one it searches all of KSL.
 
 Empty results usually mean the search was too narrow, not that nothing exists. Before telling the user there is nothing available, try the obvious widening: drop qualifiers from the query down to the item itself, remove price bounds, or search the nearest larger city. Say which of these you tried.
 

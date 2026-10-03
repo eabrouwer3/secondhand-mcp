@@ -3,7 +3,7 @@
 
 # Secondhand MCP
 
-A [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server that lets AI assistants search secondhand marketplaces. Search Facebook Marketplace, eBay, Depop, and Poshmark for used and secondhand items — filter by price, category, condition, size, and color, then get full listing details with photos, descriptions, and seller info.
+A [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server that lets AI assistants search secondhand marketplaces. Search Facebook Marketplace, eBay, Depop, Poshmark, and KSL Classifieds for used and secondhand items — filter by price, category, condition, size, and color, then get full listing details with photos, descriptions, and seller info.
 
 Works with Claude Desktop, Claude Code, Cursor, and other clients that run MCP servers locally.
 
@@ -28,6 +28,7 @@ Works with Claude Desktop, Claude Code, Cursor, and other clients that run MCP s
 | eBay | Yes (API keys) | Official Browse API |
 | Depop | No | Requires Chrome installed |
 | Poshmark | No | Requires Chrome installed |
+| KSL Classifieds | No | Utah-focused; location by ZIP code |
 
 ## Setup
 
@@ -95,7 +96,7 @@ By default all marketplaces are enabled. To limit which are active, set the `MAR
 }
 ```
 
-Valid values: `facebook`, `ebay`, `depop`, `poshmark`
+Valid values: `facebook`, `ebay`, `depop`, `poshmark`, `ksl`
 
 ### eBay API Keys
 
@@ -141,16 +142,16 @@ Search for items across marketplaces.
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
 | `query` | Yes | | Search terms |
-| `marketplace` | No | `facebook` | `facebook`, `ebay`, `depop`, `poshmark`, or `all` |
-| `location` | No | `san francisco` | City to search in (Facebook only) |
-| `radiusMiles` | No | `25` | Search radius in miles, up to 500 (Facebook only) |
+| `marketplace` | No | `facebook` | `facebook`, `ebay`, `depop`, `poshmark`, `ksl`, or `all` |
+| `location` | No | `san francisco` | City to search in (Facebook). KSL uses a 5-digit ZIP if present, e.g. `"Provo, UT 84601"`, and otherwise searches all of KSL |
+| `radiusMiles` | No | `25` | Search radius in miles, up to 500 (Facebook; KSL when location has a ZIP, default 50) |
 | `maxPrice` | No | | Maximum price |
 | `minPrice` | No | | Minimum price |
 | `limit` | No | `20` | Max results |
 | `showSold` | No | `false` | Include sold items (Facebook only) |
 | `includeImages` | No | `false` | Include image URLs in output |
-| `sort` | No | `relevance` | Sort order (Depop, Poshmark): `relevance`, `newest`, `most_popular`, `price_low_to_high`, `price_high_to_low` |
-| `condition` | No | | Item condition. eBay: `new`, `like_new`, `good`, `fair`. Depop: `new`, `like_new`, `excellent`, `good`, `fair`, `used`. Poshmark: `new` (NWT), `like_new` (NWOT), `good`, `fair` |
+| `sort` | No | `relevance` | Sort order (Depop, Poshmark, KSL): `relevance`, `newest`, `most_popular`, `price_low_to_high`, `price_high_to_low` |
+| `condition` | No | | Item condition. eBay: `new`, `like_new`, `good`, `fair`. Depop: `new`, `like_new`, `excellent`, `good`, `fair`, `used`. Poshmark: `new` (NWT), `like_new` (NWOT), `good`, `fair`. KSL: `new`, `like_new`/`excellent`, `good`, `fair` |
 | `category` | No | | Product category. Depop: `tops`, `bottoms`, `dresses`, `coats-jackets`, `footwear`, `accessories`, `bags`, `jewellery`, `activewear`, `swimwear`. Poshmark: `Jackets_&_Coats`, `Dresses`, `Shoes`, `Accessories`, etc. |
 | `brand` | No | | Brand filter (Poshmark only): e.g. `"Nike"`, `"Levi's"`, `"Gucci"` |
 | `department` | No | | Department filter (Poshmark only): `Women`, `Men`, `Kids` |
@@ -159,14 +160,14 @@ Search for items across marketplaces.
 
 **Data returned per marketplace:**
 
-| Field | Facebook | eBay | Depop | Poshmark |
-|-------|----------|------|-------|----------|
-| Title | Yes | Yes | Yes | Yes |
-| Price | Yes | Yes | Yes | Yes |
-| Location | City | City, State | — | — |
-| Condition | — | Yes | — | — |
-| Photo count | 1 thumbnail | 1 thumbnail | 1 thumbnail | 1 thumbnail |
-| Seller | Yes | Yes | — | — |
+| Field | Facebook | eBay | Depop | Poshmark | KSL |
+|-------|----------|------|-------|----------|-----|
+| Title | Yes | Yes | Yes | Yes | Yes |
+| Price | Yes | Yes | Yes | Yes | Yes |
+| Location | City | City, State | — | — | City, State |
+| Condition | — | Yes | — | — | When filtered |
+| Photo count | 1 thumbnail | 1 thumbnail | 1 thumbnail | 1 thumbnail | 1 thumbnail |
+| Seller | Yes | Yes | — | — | — |
 
 ### `get_listing_details`
 
@@ -175,18 +176,18 @@ Get full details for a specific listing using an ID from search results.
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
 | `listingId` | Yes | | Listing ID from search results |
-| `marketplace` | No | `facebook` | `facebook`, `ebay`, `depop`, or `poshmark` |
+| `marketplace` | No | `facebook` | `facebook`, `ebay`, `depop`, `poshmark`, or `ksl` |
 
 **Data returned per marketplace:**
 
-| Field | Facebook | eBay | Depop | Poshmark |
-|-------|----------|------|-------|----------|
-| Description | Yes | Yes | Yes | Yes |
-| All photos | Yes | Yes | Yes | Yes |
-| Location | City | City, State, Country | — | — |
-| Seller | Name | Username | Username | Username |
-| Delivery types | Yes | — | — | — |
-| Shipping | Yes/No | Service codes | Yes/No | Always included |
+| Field | Facebook | eBay | Depop | Poshmark | KSL |
+|-------|----------|------|-------|----------|-----|
+| Description | Yes | Yes | Yes | Yes | Yes |
+| All photos | Yes | Yes | Yes | Yes | Yes |
+| Location | City | City, State, Country | — | — | City, State + coordinates |
+| Seller | Name | Username | Username | Username | First name |
+| Delivery types | Yes | — | — | — | — |
+| Shipping | Yes/No | Service codes | Yes/No | Always included | — |
 
 ### `list_marketplaces`
 
@@ -211,6 +212,8 @@ Useful for research-style clients that expect these standard tool names; for fil
 
 **Poshmark** — Uses a headless browser to search listings with support for condition, size, color, sort, and price filters. Poshmark is not location-based — all items ship nationally.
 
+**KSL Classifieds** — Reads the listing data KSL server-renders into its search and listing pages with a plain HTTPS request; no browser or credentials. Supports price, condition, sort, and ZIP-plus-radius filters. Wanted and job posts are left out. Requests go through `SMARTPROXY_URL` when it is set, like Facebook's.
+
 ## Development
 
 ```bash
@@ -232,6 +235,7 @@ npm run build
 - **eBay**: Requires developer API keys (free tier available)
 - **Depop**: Requires Chrome/Chromium installed; slower than Facebook/eBay (~5s per search)
 - **Poshmark**: Requires Chrome/Chromium installed; no official API so relies on page scraping
+- **KSL Classifieds**: Behind PerimeterX bot protection, which refuses some requests (retried automatically) and may block datacenter IPs outright; returns the first page of results only
 - **Rate limiting**: Don't make too many requests too quickly
 
 ## License

@@ -4,7 +4,7 @@
  * Secondhand MCP Server
  *
  * An MCP server for searching secondhand marketplaces: Facebook Marketplace,
- * eBay, Depop and Poshmark.
+ * eBay, Depop, Poshmark and KSL Classifieds.
  */
 
 import { readFileSync } from 'node:fs';
