@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lookupUsCity, stateNameForCode } from '../src/marketplaces/us-cities.js';
+import { lookupUsCity, stateNameForCode, withoutZip } from '../src/marketplaces/us-cities.js';
 
 function resolvedName(query: string): string | null {
   return lookupUsCity(query)?.name ?? null;
@@ -208,5 +208,17 @@ describe('stateNameForCode', () => {
 
   it.each(['zz', 'new jersey', 'on', ''])('leaves %j alone', (value) => {
     expect(stateNameForCode(value)).toBeUndefined();
+  });
+});
+
+describe('trailing ZIP codes', () => {
+  it('resolves the city when a ZIP follows the state', () => {
+    expect(lookupUsCity('Provo, UT 84601')?.name).toBe('Provo, UT');
+    expect(lookupUsCity('Provo, UT, 84601-1234')?.name).toBe('Provo, UT');
+  });
+
+  it('leaves a bare ZIP alone', () => {
+    expect(withoutZip('84601')).toBe('84601');
+    expect(withoutZip('Provo, UT 84601')).toBe('Provo, UT');
   });
 });

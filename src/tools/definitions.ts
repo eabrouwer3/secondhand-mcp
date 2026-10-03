@@ -18,7 +18,7 @@ type AnnotatedTool = Tool & {
 export const tools: AnnotatedTool[] = [
   {
     name: 'search_marketplace',
-    description: `Search live listings on secondhand marketplaces by keyword. Marketplaces: ${listMarketplaceNames().join(', ')}. Returns up to \`limit\` listings with id, title, price, location, seller and a thumbnail; call get_listing_details with an id for the description, every photo and shipping. Requirements: Facebook Marketplace needs no credentials but is local, so pass \`location\` as "City, ST"; eBay needs EBAY_CLIENT_ID and EBAY_CLIENT_SECRET in the server environment; Depop and Poshmark need Chrome or Chromium on the machine. Behavior: read-only, no login, no purchases. Facebook may rate-limit repeated searches from one IP, and results for a query are cached for 90 seconds. Errors: a marketplace that fails returns success:false with the reason instead of throwing; an unknown marketplace name lists the valid ones; an empty result usually means the query was too specific, so widen the keywords or drop a price bound before concluding nothing exists. Not for: buying, messaging sellers, saved searches, or new-retail catalogs.`,
+    description: `Search live listings on secondhand marketplaces by keyword. Marketplaces: ${listMarketplaceNames().join(', ')}. Returns up to \`limit\` listings with id, title, price, location, seller and a thumbnail; call get_listing_details with an id for the description, every photo and shipping. Requirements: Facebook Marketplace needs no credentials but is local, so pass \`location\` as "City, ST"; eBay needs EBAY_CLIENT_ID and EBAY_CLIENT_SECRET in the server environment; Depop and Poshmark need Chrome or Chromium on the machine; KSL Classifieds (ksl, mostly Utah) needs nothing and narrows by distance only when \`location\` contains a 5-digit ZIP. Behavior: read-only, no login, no purchases. Facebook may rate-limit repeated searches from one IP, and results for a query are cached for 90 seconds. Errors: a marketplace that fails returns success:false with the reason instead of throwing; an unknown marketplace name lists the valid ones; an empty result usually means the query was too specific, so widen the keywords or drop a price bound before concluding nothing exists. Not for: buying, messaging sellers, saved searches, or new-retail catalogs.`,
     annotations: { title: 'Search Marketplace', ...READ_ONLY },
     inputSchema: {
       type: 'object',
@@ -34,12 +34,12 @@ export const tools: AnnotatedTool[] = [
         },
         location: {
           type: 'string',
-          description: 'City and state for Facebook Marketplace searches, as "City, ST" — e.g. "Austin, TX", "Portland, OR". Resolve neighborhoods, ZIP codes, metro areas and "near me" to a city and state before calling; a bare city name is ambiguous and may return the wrong state. Non-US: pass city and country. Facebook only — other marketplaces ignore it.',
+          description: 'City and state for Facebook Marketplace searches, as "City, ST" — e.g. "Austin, TX", "Portland, OR". Resolve neighborhoods, ZIP codes, metro areas and "near me" to a city and state before calling; a bare city name is ambiguous and may return the wrong state. Non-US: pass city and country. Facebook uses the city; KSL uses only a 5-digit ZIP if one is present (e.g. "Provo, UT 84601" or "84601") and otherwise searches all of KSL; other marketplaces ignore it.',
           default: 'san francisco'
         },
         radiusMiles: {
           type: 'number',
-          description: 'How far around the location to search, in miles (default 25, max 500). Facebook only. Widen it for a metro area or a rural town.',
+          description: 'How far around the location to search, in miles (default 25, max 500). Facebook, and KSL when location has a ZIP (KSL default 50). Widen it for a metro area or a rural town.',
           default: 25
         },
         maxPrice: {
@@ -72,12 +72,12 @@ export const tools: AnnotatedTool[] = [
         },
         sort: {
           type: 'string',
-          description: 'Sort order (Depop, Poshmark). Options: relevance, newest, most_popular, price_low_to_high, price_high_to_low',
+          description: 'Sort order (Depop, Poshmark, KSL — KSL supports newest, price_low_to_high, price_high_to_low and treats the rest as newest). Options: relevance, newest, most_popular, price_low_to_high, price_high_to_low',
           default: 'relevance'
         },
         condition: {
           type: 'string',
-          description: 'Item condition filter. eBay: new, like_new, good, fair. Depop: new, like_new, excellent, good, fair, used. Poshmark: new (NWT), like_new (NWOT), good, fair. Use "any" for no filter.',
+          description: 'Item condition filter. eBay: new, like_new, good, fair. Depop: new, like_new, excellent, good, fair, used. Poshmark: new (NWT), like_new (NWOT), good, fair. KSL: new, like_new/excellent, good, fair. Use "any" for no filter.',
         },
         category: {
           type: 'string',

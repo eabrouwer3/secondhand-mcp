@@ -1,4 +1,4 @@
-import { lookupUsCity, stateNameForCode } from '../us-cities.js';
+import { lookupUsCity, stateNameForCode, withoutZip } from '../us-cities.js';
 import { LocationCoordinates } from '../../types.js';
 import { LOCATION_DOC_ID, locationVariables } from './queries.js';
 import { fetchGraphQL } from './transport.js';
@@ -118,7 +118,7 @@ async function placesMatching(query: string): Promise<PlaceNode[]> {
  * bare city name is a last resort because "austin" is Austin, Illinois.
  */
 export function lookupCandidates(query: string): string[] {
-  const typed = query.toLowerCase().trim();
+  const typed = withoutZip(query).toLowerCase().trim();
   const parts = typed.split(',').map((part) => part.trim());
   const city = parts[0];
   const state = parts.length > 1 ? stateNameForCode(parts[parts.length - 1]) : undefined;
